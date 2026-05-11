@@ -1,0 +1,52 @@
+enum UserRole {
+  student
+  admin
+}
+
+enum AvatarTone {
+  accent
+  neutral
+}
+
+model User {
+  id                 String     @id @default(uuid()) @db.Uuid
+
+  // identity
+  email              String?    @unique
+  name               String
+
+  // auth
+  password           String?
+
+  // profile
+  avatarInitial      String?    @db.Char(1)
+  avatarTone         AvatarTone @default(neutral)
+  school             String?
+  grade              String?
+  targetExam         String?
+  state              String?
+  district           String?
+
+  // activity
+  lastActiveAt       DateTime?
+  emailVerifiedAt    DateTime?
+
+  // moderation & soft-delete
+  role               UserRole   @default(student)
+  isSuspended        Boolean    @default(false)
+  deletedAt          DateTime?
+
+  // relations
+  userExams          UserExam[]
+  sessions           PracticeSession[]
+  authSessions       UserSession[]
+  attempts           Attempt[]
+
+  // timestamps
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@index([email])
+  @@index([lastActiveAt])
+  @@index([deletedAt])
+}

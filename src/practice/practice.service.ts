@@ -1,0 +1,349 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { ExamsService } from '../exams/exams.service';
+import { CreateSessionDto } from './dto/create-session.dto';
+import { SubmitAttemptDto } from './dto/submit-attempt.dto';
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+@Injectable()
+export class PracticeService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly examsService: ExamsService,
+  ) {}
+
+  async createSession(userId: string, dto: CreateSessionDto) {
+    const examId = await this.examsService.resolveExamId(userId, dto.examId);
+
+    const where: Record<string, unknown> = {
+      status: 'published',
+      questionExams: { some: { examId } },
+    };
+    if (dto.subjectId) where.subjectId = dto.subjectId;
+    if (dto.topicId) where.topicId = dto.topicId;
+    if (dto.difficulty && dto.difficulty !== 'mixed') where.difficulty = dto.difficulty;
+
+    const available = await this.prisma.question.findMany({
+      where,
+      select: { id: true },
+    });
+
+    if (available.length === 0) {
+      throw new UnprocessableEntityException('No questions available for this filter');
+    }
+
+    const selectedIds = shuffle(available.map((q) => q.id)).slice(
+      0,
+      Math.min(dto.questionCount ?? 10, available.length),
+    );
+    const count = selectedIds.length;
+
+    const session = await this.prisma.$transaction(async (tx) => {
+      const sess = await tx.practiceSession.create({
+        data: {
+          userId,
+          examId,
+          mode: dto.mode,
+          subjectId: dto.subjectId ?? null,
+          topicId: dto.topicId ?? null,
+          difficulty: (dto.difficulty as any) ?? 'mixed',
+          questionCount: count,
+          timeLimitSec: dto.timeLimitSec ?? null,
+          total: count,
+        },
+      });
+
+      await tx.sessionQuestion.createMany({
+        data: selectedIds.map((id, i) => ({
+          sessionId: sess.id,
+          questionId: id,
+          sortOrder: i + 1,
+        })),
+      });
+
+      return sess;
+    });
+
+    const questions = await this.prisma.question.findMany({
+      where: { id: { in: selectedIds } },
+      include: {
+        currentRevision: { select: { id: true, prompt: true } },
+        options: {
+          select: { id: true, label: true, text: true, sub: true, sortOrder: true },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    const byId = new Map(questions.map((q) => [q.id, q]));
+    const orderedQuestions = selectedIds.map((id) => {
+      const q = byId.get(id)!;
+      return {
+        id: q.id,
+        difficulty: q.difficulty,
+        type: q.type,
+        xpReward: q.xpReward,
+        revision: q.currentRevision
+          ? { id: q.currentRevision.id, prompt: q.currentRevision.prompt }
+          : null,
+        options: q.options,
+      };
+    });
+
+    return {
+      session: {
+        id: session.id,
+        mode: session.mode,
+        examId: session.examId,
+        questionCount: session.questionCount,
+        timeLimitSec: session.timeLimitSec,
+        startedAt: session.startedAt,
+      },
+      questions: orderedQuestions,
+    };
+  }
+
+  async getSession(userId: string, sessionId: string) {
+    const session = await this.prisma.practiceSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        sessionQuestions: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            question: {
+              include: {
+                currentRevision: { select: { id: true, prompt: true } },
+                options: {
+                  select: { id: true, label: true, text: true, sub: true, sortOrder: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
+        attempts: {
+          select: { questionId: true, isCorrect: true, selectedOptionId: true, xpAwarded: true },
+        },
+      },
+    });
+
+    if (!session || session.userId !== userId) throw new NotFoundException('Session not found');
+
+    const attemptMap = new Map(session.attempts.map((a) => [a.questionId, a]));
+
+    return {
+      id: session.id,
+      mode: session.mode,
+      examId: session.examId,
+      score: session.score,
+      total: session.total,
+      startedAt: session.startedAt,
+      finishedAt: session.finishedAt,
+      timeSpentSec: session.timeSpentSec,
+      questions: session.sessionQuestions.map((sq) => {
+        const attempt = attemptMap.get(sq.questionId);
+        return {
+          sortOrder: sq.sortOrder,
+          id: sq.question.id,
+          difficulty: sq.question.difficulty,
+          type: sq.question.type,
+          revision: sq.question.currentRevision,
+          options: sq.question.options,
+          myStatus: attempt ? (attempt.isCorrect ? 'correct' : 'incorrect') : 'unattempted',
+          mySelectedOptionId: attempt?.selectedOptionId ?? null,
+        };
+      }),
+    };
+  }
+
+  async submitAttempt(userId: string, sessionId: string, dto: SubmitAttemptDto) {
+    const { questionId, selectedOptionId, timeSeconds } = dto;
+
+    const session = await this.prisma.practiceSession.findUnique({
+      where: { id: sessionId },
+      select: { userId: true, finishedAt: true, score: true },
+    });
+
+    if (!session || session.userId !== userId) throw new NotFoundException('Session not found');
+    if (session.finishedAt) throw new ConflictException('Session is already finished');
+
+    // Verify question belongs to session (uses the unique index)
+    const sq = await this.prisma.sessionQuestion.findUnique({
+      where: { sessionId_questionId: { sessionId, questionId } },
+    });
+    if (!sq) throw new NotFoundException('Question not in session');
+
+    // Idempotent: return existing attempt
+    const existing = await this.prisma.attempt.findFirst({
+      where: { sessionId, userId, questionId },
+    });
+    if (existing) {
+      return {
+        attempt: { id: existing.id, isCorrect: existing.isCorrect, xpAwarded: existing.xpAwarded },
+        isCorrect: existing.isCorrect,
+        runningScore: session.score,
+      };
+    }
+
+    // Load question + revision to verify correctness
+    const question = await this.prisma.question.findUnique({
+      where: { id: questionId },
+      include: {
+        currentRevision: { select: { id: true, correctOptionLabel: true, xpReward: true } },
+        options: { select: { id: true, label: true } },
+      },
+    });
+    if (!question?.currentRevision) throw new NotFoundException('Question has no revision');
+
+    let isCorrect = false;
+    if (selectedOptionId) {
+      const opt = question.options.find((o) => o.id === selectedOptionId);
+      if (!opt) throw new NotFoundException('Option not found for this question');
+      isCorrect = opt.label === question.currentRevision.correctOptionLabel;
+    }
+
+    const xpAwarded = isCorrect ? question.currentRevision.xpReward : 0;
+
+    const { attempt, runningScore } = await this.prisma.$transaction(async (tx) => {
+      const a = await tx.attempt.create({
+        data: {
+          userId,
+          questionId,
+          questionRevisionId: question.currentRevision!.id,
+          sessionId,
+          selectedOptionId: selectedOptionId ?? null,
+          isCorrect,
+          timeSeconds,
+          xpAwarded,
+        },
+      });
+
+      const updated = await tx.practiceSession.update({
+        where: { id: sessionId },
+        data: { score: { increment: isCorrect ? 1 : 0 } },
+        select: { score: true },
+      });
+
+      return { attempt: a, runningScore: updated.score };
+    });
+
+    return {
+      attempt: { id: attempt.id, isCorrect, xpAwarded },
+      isCorrect,
+      runningScore,
+    };
+  }
+
+  async finishSession(userId: string, sessionId: string) {
+    const session = await this.prisma.practiceSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        attempts: {
+          select: {
+            isCorrect: true,
+            xpAwarded: true,
+            question: { select: { topicId: true } },
+          },
+        },
+      },
+    });
+
+    if (!session || session.userId !== userId) throw new NotFoundException('Session not found');
+
+    if (!session.finishedAt) {
+      const now = new Date();
+      const timeSpentSec = Math.floor((now.getTime() - session.startedAt.getTime()) / 1000);
+
+      await this.prisma.practiceSession.update({
+        where: { id: sessionId },
+        data: { finishedAt: now, timeSpentSec },
+      });
+
+      session.finishedAt = now;
+      session.timeSpentSec = timeSpentSec;
+    }
+
+    return this.buildFinishResponse(session as typeof session & { timeSpentSec: number });
+  }
+
+  async findSessions(userId: string, limit: number, cursor?: string) {
+    const take = Math.min(limit, 50);
+
+    const rows = await this.prisma.practiceSession.findMany({
+      where: { userId },
+      take: take + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { startedAt: 'desc' },
+      select: {
+        id: true,
+        mode: true,
+        difficulty: true,
+        questionCount: true,
+        score: true,
+        total: true,
+        timeSpentSec: true,
+        startedAt: true,
+        finishedAt: true,
+        exam: { select: { id: true, code: true, label: true } },
+      },
+    });
+
+    const hasMore = rows.length > take;
+    const data = hasMore ? rows.slice(0, take) : rows;
+
+    return {
+      data: data.map((s) => ({
+        ...s,
+        accuracy: s.total > 0 ? Math.round((s.score / s.total) * 10000) / 100 : null,
+      })),
+      nextCursor: hasMore ? data[data.length - 1].id : null,
+    };
+  }
+
+  private buildFinishResponse(session: {
+    score: number;
+    total: number;
+    timeSpentSec: number;
+    attempts: { isCorrect: boolean; xpAwarded: number; question: { topicId: string } }[];
+  }) {
+    const accuracy = session.total > 0
+      ? Math.round((session.score / session.total) * 10000) / 100
+      : 0;
+
+    const byTopicMap = new Map<string, { correct: number; total: number }>();
+    for (const a of session.attempts) {
+      const tid = a.question.topicId;
+      const curr = byTopicMap.get(tid) ?? { correct: 0, total: 0 };
+      byTopicMap.set(tid, {
+        correct: curr.correct + (a.isCorrect ? 1 : 0),
+        total: curr.total + 1,
+      });
+    }
+
+    return {
+      score: session.score,
+      total: session.total,
+      accuracy,
+      timeSpentSec: session.timeSpentSec,
+      byTopic: Array.from(byTopicMap.entries()).map(([topicId, stats]) => ({
+        topicId,
+        correct: stats.correct,
+        total: stats.total,
+      })),
+      xpAwarded: session.attempts.reduce((sum, a) => sum + a.xpAwarded, 0),
+    };
+  }
+}

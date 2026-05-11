@@ -1,0 +1,28 @@
+model Topic {
+  id        String @id @default(uuid()) @db.Uuid
+  subjectId String @db.Uuid
+  code      String
+  label     String
+  sortOrder Int    @default(0)
+
+  subject    Subject     @relation(fields: [subjectId], references: [id])
+  topicExams TopicExam[]
+  questions  Question[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([subjectId, code])
+  @@index([subjectId])
+}
+
+model TopicExam {
+  topicId   String @db.Uuid
+  examId    String @db.Uuid
+  sortOrder Int    @default(0)
+
+  topic Topic @relation(fields: [topicId], references: [id])
+  exam  Exam  @relation(fields: [examId], references: [id])
+
+  @@id([topicId, examId])
+  @@index([examId])
+}

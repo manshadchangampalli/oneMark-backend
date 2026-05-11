@@ -1,0 +1,92 @@
+enum QuestionDifficulty {
+  easy
+  medium
+  hard
+}
+
+enum QuestionType {
+  mcq
+}
+
+enum QuestionStatus {
+  draft
+  published
+  archived
+}
+
+model Question {
+  id                  String             @id @default(uuid()) @db.Uuid
+  subjectId           String             @db.Uuid
+  topicId             String             @db.Uuid
+  difficulty          QuestionDifficulty @default(medium)
+  type                QuestionType       @default(mcq)
+  status              QuestionStatus     @default(published)
+  xpReward            Int                @default(50)
+  successRate         Decimal?           @db.Decimal(5, 2)
+  avgTimeSeconds      Int?
+  discriminationIndex Decimal?           @db.Decimal(5, 2)
+  currentRevisionId   String?            @unique @db.Uuid
+  createdBy           String?            @db.Uuid
+
+  subject          Subject            @relation(fields: [subjectId], references: [id])
+  topic            Topic              @relation(fields: [topicId], references: [id])
+  currentRevision  QuestionRevision?  @relation("CurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions        QuestionRevision[] @relation("Revisions")
+  options          QuestionOption[]
+  questionExams    QuestionExam[]
+  sessionQuestions SessionQuestion[]
+  attempts         Attempt[]
+  dailyChallenges  DailyChallenge[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subjectId, topicId])
+  @@index([difficulty])
+  @@index([status])
+}
+
+// Append-only — never edited after insert; links attempt history to exact question text
+model QuestionRevision {
+  id                  String             @id @default(uuid()) @db.Uuid
+  questionId          String             @db.Uuid
+  version             Int
+  prompt              String
+  correctOptionLabel  String             // 'A' | 'B' | 'C' | 'D'
+  officialExplanation Json?              // { steps: string[] }
+  difficulty          QuestionDifficulty
+  xpReward            Int
+  createdBy           String?            @db.Uuid
+  createdAt           DateTime           @default(now())
+
+  question   Question  @relation("Revisions", fields: [questionId], references: [id])
+  currentFor Question? @relation("CurrentRevision")
+  attempts   Attempt[]
+
+  @@unique([questionId, version])
+}
+
+model QuestionOption {
+  id         String  @id @default(uuid()) @db.Uuid
+  questionId String  @db.Uuid
+  label      String  // 'A', 'B', 'C', 'D'
+  text       String
+  sub        String? // optional hint, e.g. "≈ 34.64 m"
+  sortOrder  Int
+
+  question Question  @relation(fields: [questionId], references: [id])
+  attempts Attempt[] @relation("SelectedOption")
+
+  @@unique([questionId, label])
+}
+
+model QuestionExam {
+  questionId String @db.Uuid
+  examId     String @db.Uuid
+
+  question Question @relation(fields: [questionId], references: [id])
+  exam     Exam     @relation(fields: [examId], references: [id])
+
+  @@id([questionId, examId])
+  @@index([examId])
+}

@@ -1,0 +1,16 @@
+model DailyChallenge {
+  id           String   @id @default(uuid()) @db.Uuid
+  date         DateTime @db.Date    // one challenge per (date, exam)
+  examId       String   @db.Uuid
+  questionId   String   @db.Uuid
+  totalSolvers Int      @default(0) // denormalized; any completed attempt counts
+
+  exam         Exam      @relation(fields: [examId], references: [id])
+  question     Question  @relation(fields: [questionId], references: [id])
+  attempts     Attempt[]
+
+  createdAt    DateTime @default(now())
+
+  @@unique([date, examId])
+  @@index([date])
+}

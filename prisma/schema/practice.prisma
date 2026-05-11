@@ -1,0 +1,78 @@
+enum SessionMode {
+  quick
+  mock
+  drill
+  daily
+  custom
+}
+
+enum SessionDifficulty {
+  easy
+  medium
+  hard
+  mixed
+}
+
+model PracticeSession {
+  id            String            @id @default(uuid()) @db.Uuid
+  userId        String            @db.Uuid
+  examId        String            @db.Uuid
+  mode          SessionMode
+  subjectId     String?           @db.Uuid
+  topicId       String?           @db.Uuid
+  difficulty    SessionDifficulty @default(mixed)
+  questionCount Int
+  timeLimitSec  Int?
+  startedAt     DateTime          @default(now())
+  finishedAt    DateTime?
+  score         Int               @default(0)
+  total         Int               @default(0)
+  timeSpentSec  Int               @default(0)
+
+  user             User              @relation(fields: [userId], references: [id])
+  exam             Exam              @relation(fields: [examId], references: [id])
+  sessionQuestions SessionQuestion[]
+  attempts         Attempt[]
+
+  @@index([userId, startedAt(sort: Desc)])
+}
+
+model SessionQuestion {
+  sessionId  String          @db.Uuid
+  questionId String          @db.Uuid
+  sortOrder  Int
+
+  session    PracticeSession @relation(fields: [sessionId], references: [id])
+  question   Question        @relation(fields: [questionId], references: [id])
+
+  @@id([sessionId, sortOrder])
+  @@unique([sessionId, questionId])
+}
+
+model Attempt {
+  id                 String           @id @default(uuid()) @db.Uuid
+  userId             String           @db.Uuid
+  questionId         String           @db.Uuid
+  questionRevisionId String           @db.Uuid
+  sessionId          String?          @db.Uuid
+  dailyChallengeId   String?          @db.Uuid
+  selectedOptionId   String?          @db.Uuid
+  isCorrect          Boolean
+  timeSeconds        Int
+  xpAwarded          Int
+  attemptedAt        DateTime         @default(now())
+
+  user             User              @relation(fields: [userId], references: [id])
+  question         Question          @relation(fields: [questionId], references: [id])
+  questionRevision QuestionRevision  @relation(fields: [questionRevisionId], references: [id])
+  session          PracticeSession?  @relation(fields: [sessionId], references: [id])
+  dailyChallenge   DailyChallenge?   @relation(fields: [dailyChallengeId], references: [id])
+  selectedOption   QuestionOption?   @relation("SelectedOption", fields: [selectedOptionId], references: [id])
+
+  @@index([userId, attemptedAt(sort: Desc)])
+  @@index([userId, questionId])
+  @@index([sessionId])
+  @@index([dailyChallengeId])
+  @@index([questionId, attemptedAt(sort: Desc)])
+  @@index([questionRevisionId])
+}

@@ -1,0 +1,30 @@
+model Exam {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique // 'jee', 'neet', 'ib', 'a-levels', 'psc', 'generic'
+  label       String           // 'JEE Advanced 2026'
+  description String?
+  isActive    Boolean  @default(true)
+
+  userExams        UserExam[]
+  subjectExams     SubjectExam[]
+  topicExams       TopicExam[]
+  questionExams    QuestionExam[]
+  sessions         PracticeSession[]
+  dailyChallenges  DailyChallenge[]
+
+  createdAt   DateTime @default(now())
+}
+
+model UserExam {
+  userId     String   @db.Uuid
+  examId     String   @db.Uuid
+  isPrimary  Boolean  @default(false)
+  enrolledAt DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+  exam       Exam     @relation(fields: [examId], references: [id])
+
+  @@id([userId, examId])
+  @@index([userId])
+  @@index([examId])
+}
