@@ -29,6 +29,7 @@ export class AuthService {
   }
 
   async signup(dto: SignupDto, metadata?: { userAgent?: string; ipAddress?: string }) {
+    console.log("🚀 ~ AuthService ~ signup ~ dto:", dto)
     const existing = await this.users.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 
