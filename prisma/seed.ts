@@ -9,7 +9,13 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 // ── Exams ────────────────────────────────────────────────────────────────────
 
 const EXAMS = [
-  { code: 'psc', label: 'Kerala PSC', description: 'Kerala Public Service Commission' },
+  { code: 'psc',    label: 'Kerala PSC', description: 'Kerala Public Service Commission', isActive: true  },
+  { code: 'jee',    label: 'JEE',        description: 'Main + Advanced',                  isActive: false },
+  { code: 'neet',   label: 'NEET',       description: 'Medical entrance',                 isActive: false },
+  { code: 'cuet',   label: 'CUET',       description: 'Central universities',             isActive: false },
+  { code: 'boards', label: 'Boards',     description: 'CBSE / ICSE / State',             isActive: false },
+  { code: 'gate',   label: 'GATE',       description: 'Engineering PG',                  isActive: false },
+  { code: 'cat',    label: 'CAT',        description: 'Management',                      isActive: false },
 ];
 
 // ── Location ─────────────────────────────────────────────────────────────────
