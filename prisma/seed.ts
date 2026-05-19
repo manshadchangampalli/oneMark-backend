@@ -9,9 +9,26 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 // ── Exams ────────────────────────────────────────────────────────────────────
 
 const EXAMS = [
-  { code: 'jee',  label: 'JEE Advanced 2026', description: 'Joint Entrance Examination' },
-  { code: 'neet', label: 'NEET 2026',          description: 'National Eligibility cum Entrance Test' },
-  { code: 'psc',  label: 'Kerala PSC',         description: 'Kerala Public Service Commission' },
+  { code: 'psc', label: 'Kerala PSC', description: 'Kerala Public Service Commission' },
+];
+
+// ── Location ─────────────────────────────────────────────────────────────────
+
+const KERALA_DISTRICTS = [
+  'Thiruvananthapuram',
+  'Kollam',
+  'Pathanamthitta',
+  'Alappuzha',
+  'Kottayam',
+  'Idukki',
+  'Ernakulam',
+  'Thrissur',
+  'Palakkad',
+  'Malappuram',
+  'Kozhikode',
+  'Wayanad',
+  'Kannur',
+  'Kasaragod',
 ];
 
 // ── Subjects ─────────────────────────────────────────────────────────────────
@@ -457,6 +474,22 @@ async function main() {
 
     console.log(`  [${q.subjectCode}/${q.topicCode}] "${q.prompt.slice(0, 50)}..."`);
   }
+
+  // Location — Kerala
+  console.log('Seeding Kerala state and districts...');
+  const kerala = await prisma.state.upsert({
+    where: { code: 'KL' },
+    create: { name: 'Kerala', code: 'KL' },
+    update: { name: 'Kerala' },
+  });
+  for (let i = 0; i < KERALA_DISTRICTS.length; i++) {
+    await prisma.district.upsert({
+      where: { stateId_name: { stateId: kerala.id, name: KERALA_DISTRICTS[i] } },
+      create: { stateId: kerala.id, name: KERALA_DISTRICTS[i], sortOrder: i + 1 },
+      update: { sortOrder: i + 1 },
+    });
+  }
+  console.log(`  Kerala: ${KERALA_DISTRICTS.length} districts`);
 
   console.log('Done.');
 }

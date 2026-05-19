@@ -1,0 +1,22 @@
+model State {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String     @unique
+  code      String     @unique // e.g. 'KL'
+  isActive  Boolean    @default(true)
+
+  districts District[]
+
+  createdAt DateTime   @default(now())
+}
+
+model District {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  stateId   String   @db.Uuid
+  sortOrder Int      @default(0)
+
+  state     State    @relation(fields: [stateId], references: [id])
+
+  @@unique([stateId, name])
+  @@index([stateId])
+}
