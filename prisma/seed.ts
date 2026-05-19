@@ -342,6 +342,13 @@ async function main() {
   for (const e of EXAMS) {
     await prisma.exam.upsert({ where: { code: e.code }, create: e, update: e });
   }
+  // Deactivate any exams not in the active list
+  const activeCodes = EXAMS.map((e) => e.code);
+  await prisma.exam.updateMany({
+    where: { code: { notIn: activeCodes } },
+    data: { isActive: false },
+  });
+  console.log(`  Active exams: ${activeCodes.join(', ')}; others deactivated`);
 
   // Subjects
   console.log('Seeding subjects...');
