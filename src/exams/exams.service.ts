@@ -11,12 +11,11 @@ import type { EnrolExamDto } from './dto/enrol-exam.dto';
 export class ExamsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // GET /exams — all active exams (public)
+  // GET /exams — all exams (active first, then inactive); isActive included for frontend disabled state
   findAllActive() {
     return this.prisma.exam.findMany({
-      where: { isActive: true },
-      select: { id: true, code: true, label: true, description: true },
-      orderBy: { label: 'asc' },
+      select: { id: true, code: true, label: true, description: true, isActive: true },
+      orderBy: [{ isActive: 'desc' }, { label: 'asc' }],
     });
   }
 
