@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -30,6 +31,7 @@ export class AuthService {
 
   async signup(dto: SignupDto, metadata?: { userAgent?: string; ipAddress?: string }) {
     console.log("🚀 ~ AuthService ~ signup ~ dto:", dto)
+    if (!dto.targetExam) throw new BadRequestException('Target exam is required');
     const existing = await this.users.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 

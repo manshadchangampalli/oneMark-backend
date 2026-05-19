@@ -4,7 +4,7 @@ export class SignupDto {
   name: string;
   school?: string;
   grade?: string;
-  targetExam?: string;
+  targetExam: string;
   state?: string;
   district?: string;
 }
