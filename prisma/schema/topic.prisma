@@ -1,18 +1,34 @@
 model Topic {
-  id        String @id @default(uuid()) @db.Uuid
-  subjectId String @db.Uuid
-  code      String
-  label     String
-  sortOrder Int    @default(0)
+  id            String @id @default(uuid()) @db.Uuid
+  subjectId     String @db.Uuid
+  code          String
+  label         String
+  sortOrder     Int    @default(0)
+  questionCount Int    @default(0) // denormalized; updated when questions are added/removed
 
-  subject    Subject     @relation(fields: [subjectId], references: [id])
-  topicExams TopicExam[]
-  questions  Question[]
+  subject        Subject          @relation(fields: [subjectId], references: [id])
+  topicExams     TopicExam[]
+  questions      Question[]
+  userTopicStats UserTopicStat[]
 
   createdAt DateTime @default(now())
 
   @@unique([subjectId, code])
   @@index([subjectId])
+}
+
+model UserTopicStat {
+  userId          String   @db.Uuid
+  topicId         String   @db.Uuid
+  attempted       Int      @default(0)
+  correct         Int      @default(0)
+  lastAttemptedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  topic Topic @relation(fields: [topicId], references: [id])
+
+  @@id([userId, topicId])
+  @@index([userId, lastAttemptedAt(sort: Desc)])
 }
 
 model TopicExam {

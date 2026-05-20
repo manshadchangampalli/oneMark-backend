@@ -9,6 +9,40 @@ export class TopicsService {
     private readonly examsService: ExamsService,
   ) {}
 
+  async getProgress(userId: string, examIdParam?: string, limit = 4) {
+    const examId = await this.examsService.resolveExamId(userId, examIdParam);
+
+    const stats = await this.prisma.userTopicStat.findMany({
+      where: { userId, attempted: { gt: 0 } },
+      orderBy: { lastAttemptedAt: 'desc' },
+      take: limit,
+      select: {
+        attempted:       true,
+        correct:         true,
+        lastAttemptedAt: true,
+        topic: {
+          select: {
+            id:            true,
+            label:         true,
+            questionCount: true,
+            subject: { select: { label: true, colorHex: true } },
+          },
+        },
+      },
+    });
+
+    return stats.map((s) => ({
+      topicId:         s.topic.id,
+      topic:           s.topic.label,
+      subject:         s.topic.subject.label,
+      color:           s.topic.subject.colorHex,
+      attempted:       s.attempted,
+      total:           s.topic.questionCount,
+      correct:         s.correct,
+      lastAttemptedAt: s.lastAttemptedAt,
+    }));
+  }
+
   async findForSubject(userId: string, subjectId: string, examIdParam?: string) {
     const examId = await this.examsService.resolveExamId(userId, examIdParam);
 

@@ -685,6 +685,8 @@ async function main() {
 
   // ── Clear all questions ──
   console.log('Clearing existing questions...');
+  await prisma.userTopicStat.deleteMany({});
+  await prisma.dailyChallengeSession.deleteMany({});
   await prisma.dailyChallenge.deleteMany({});
   await prisma.attempt.deleteMany({});
   await prisma.sessionQuestion.deleteMany({});
@@ -721,6 +723,8 @@ async function main() {
 
   // ── Topics ──
   console.log('Seeding topics...');
+  await prisma.topicExam.deleteMany({});
+  await prisma.topic.deleteMany({});
   for (const [subjectCode, topics] of Object.entries(TOPICS)) {
     const subject = await prisma.subject.findUnique({ where: { code: subjectCode } });
     if (!subject) continue;
@@ -736,7 +740,6 @@ async function main() {
 
   // ── Exam → Topic mappings ──
   console.log('Seeding exam → topic mappings...');
-  await prisma.topicExam.deleteMany({});
   for (const [examCode, subjectTopics] of Object.entries(EXAM_TOPICS)) {
     const exam = await prisma.exam.findUnique({ where: { code: examCode } });
     if (!exam) continue;
@@ -816,6 +819,17 @@ async function main() {
 
     console.log(`  ✓ [${q.subjectCode}] ${q.prompt.slice(0, 55)}...`);
   }
+
+  // ── Update Topic.questionCount ──
+  console.log('Updating topic question counts...');
+  const allTopics = await prisma.topic.findMany({ select: { id: true } });
+  for (const t of allTopics) {
+    const count = await prisma.question.count({
+      where: { topicId: t.id, status: 'published' },
+    });
+    await prisma.topic.update({ where: { id: t.id }, data: { questionCount: count } });
+  }
+  console.log(`  Updated ${allTopics.length} topics`);
 
   // ── Location — Kerala ──
   console.log('Seeding Kerala state and districts...');

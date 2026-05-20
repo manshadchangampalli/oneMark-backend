@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "totalAttempts" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "totalCorrect" INTEGER NOT NULL DEFAULT 0;

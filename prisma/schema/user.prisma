@@ -45,6 +45,7 @@ model User {
   authSessions       UserSession[]
   attempts           Attempt[]
   dailyChallengeSessions DailyChallengeSession[]
+  userTopicStats         UserTopicStat[]
 
   // timestamps
   createdAt          DateTime   @default(now())

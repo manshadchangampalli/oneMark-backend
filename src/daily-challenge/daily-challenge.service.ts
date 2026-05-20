@@ -227,6 +227,16 @@ export class DailyChallengeService {
         },
       });
 
+      await tx.userTopicStat.upsert({
+        where: { userId_topicId: { userId, topicId: question.topicId } },
+        create: { userId, topicId: question.topicId, attempted: 1, correct: isCorrect ? 1 : 0 },
+        update: {
+          attempted:       { increment: 1 },
+          correct:         { increment: isCorrect ? 1 : 0 },
+          lastAttemptedAt: new Date(),
+        },
+      });
+
       return a;
     });
 
