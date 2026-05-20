@@ -41,6 +41,7 @@ model User {
   sessions           PracticeSession[]
   authSessions       UserSession[]
   attempts           Attempt[]
+  dailyChallengeSessions DailyChallengeSession[]
 
   // timestamps
   createdAt          DateTime   @default(now())

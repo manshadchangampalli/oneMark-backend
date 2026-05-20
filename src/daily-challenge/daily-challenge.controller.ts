@@ -20,6 +20,15 @@ export class DailyChallengeController {
     return this.dailyChallengeService.getToday(user.id, examId);
   }
 
+  // POST /daily-challenge/start
+  // Records when the user first opens the question. Idempotent — startedAt never overwrites.
+  @Post('start')
+  @HttpCode(HttpStatus.OK)
+  recordStart(@Req() req, @Query('examId') examId?: string) {
+    const user = (req as Request).user as { id: string };
+    return this.dailyChallengeService.recordStart(user.id, examId);
+  }
+
   // POST /daily-challenge/attempt
   // One attempt per user per day. Returns 409 if already attempted.
   @Post('attempt')

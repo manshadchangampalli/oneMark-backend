@@ -5,12 +5,24 @@ model DailyChallenge {
   questionId   String   @db.Uuid
   totalSolvers Int      @default(0) // denormalized; any completed attempt counts
 
-  exam         Exam      @relation(fields: [examId], references: [id])
-  question     Question  @relation(fields: [questionId], references: [id])
+  exam         Exam                     @relation(fields: [examId], references: [id])
+  question     Question                 @relation(fields: [questionId], references: [id])
   attempts     Attempt[]
+  sessions     DailyChallengeSession[]
 
   createdAt    DateTime @default(now())
 
   @@unique([date, examId])
   @@index([date])
+}
+
+model DailyChallengeSession {
+  userId      String   @db.Uuid
+  challengeId String   @db.Uuid
+  startedAt   DateTime @default(now())
+
+  user      User           @relation(fields: [userId], references: [id])
+  challenge DailyChallenge @relation(fields: [challengeId], references: [id])
+
+  @@id([userId, challengeId])
 }

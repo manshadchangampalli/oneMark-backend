@@ -82,10 +82,16 @@ export class DailyChallengeService {
       });
     }
 
-    const myAttempt = await this.prisma.attempt.findFirst({
-      where: { userId, dailyChallengeId: challenge.id },
-      select: { id: true, isCorrect: true, selectedOptionId: true, xpAwarded: true },
-    });
+    const [myAttempt, mySession] = await Promise.all([
+      this.prisma.attempt.findFirst({
+        where: { userId, dailyChallengeId: challenge.id },
+        select: { id: true, isCorrect: true, selectedOptionId: true, xpAwarded: true },
+      }),
+      this.prisma.dailyChallengeSession.findUnique({
+        where: { userId_challengeId: { userId, challengeId: challenge.id } },
+        select: { startedAt: true },
+      }),
+    ]);
 
     const q = challenge.question;
 
@@ -125,7 +131,26 @@ export class DailyChallengeService {
         options: q.options,
       },
       myAttempt: myAttempt ?? null,
+      startedAt: mySession?.startedAt ?? null,
     };
+  }
+
+  async recordStart(userId: string, examIdParam?: string) {
+    const examId = await this.examsService.resolveExamId(userId, examIdParam);
+    const date = this.today();
+
+    const challenge = await this.prisma.dailyChallenge.findUnique({
+      where: { date_examId: { date, examId } },
+      select: { id: true },
+    });
+    if (!challenge) throw new NotFoundException('No daily challenge for today');
+
+    return this.prisma.dailyChallengeSession.upsert({
+      where: { userId_challengeId: { userId, challengeId: challenge.id } },
+      create: { userId, challengeId: challenge.id },
+      update: {}, // keep the original startedAt — don't overwrite on refresh
+      select: { startedAt: true },
+    });
   }
 
   async submitAttempt(userId: string, dto: DailyAttemptDto) {
