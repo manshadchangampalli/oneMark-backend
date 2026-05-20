@@ -28,6 +28,7 @@ model User {
   district           String?
 
   // activity
+  totalXp            Int        @default(0)
   lastActiveAt       DateTime?
   emailVerifiedAt    DateTime?
 

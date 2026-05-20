@@ -7,6 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ExamsService } from '../exams/exams.service';
 import { DailyAttemptDto } from './dto/submit-attempt.dto';
 
+const DAILY_CHALLENGE_BONUS = 20; // XP bonus on top of the question's base reward
+
 // Question fields returned to the client (without correct answer)
 const QUESTION_INCLUDE = {
   subject: { select: { label: true } },
@@ -120,6 +122,7 @@ export class DailyChallengeService {
       id: challenge.id,
       date: challenge.date,
       totalSolvers: challenge.totalSolvers,
+      dailyBonus: DAILY_CHALLENGE_BONUS,
       question: {
         id: q.id,
         subject: q.subject?.label ?? null,
@@ -194,8 +197,7 @@ export class DailyChallengeService {
       isCorrect = opt.label === question.currentRevision.correctOptionLabel;
     }
 
-    // Daily challenge gives +20 XP bonus on top of the question's base reward
-    const xpAwarded = isCorrect ? question.currentRevision.xpReward + 20 : 0;
+    const xpAwarded = isCorrect ? question.currentRevision.xpReward + DAILY_CHALLENGE_BONUS : 0;
 
     const attempt = await this.prisma.$transaction(async (tx) => {
       const a = await tx.attempt.create({
@@ -213,8 +215,15 @@ export class DailyChallengeService {
 
       await tx.dailyChallenge.update({
         where: { id: challenge.id },
-        data: { totalSolvers: { increment: 1 } }, // count all attempts, not just correct
+        data: { totalSolvers: { increment: 1 } },
       });
+
+      if (xpAwarded > 0) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { totalXp: { increment: xpAwarded } },
+        });
+      }
 
       return a;
     });
