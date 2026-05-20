@@ -47,13 +47,33 @@ export class DailyChallengeService {
 
     // Auto-create if no challenge set for today
     if (!challenge) {
+      // Exclude questions already used as a daily challenge for this exam (no repeats)
+      const usedAsChallenge = await this.prisma.dailyChallenge.findMany({
+        where: { examId },
+        select: { questionId: true },
+      });
+      const usedIds = usedAsChallenge.map((c) => c.questionId);
+
       const available = await this.prisma.question.findMany({
-        where: { status: 'published', questionExams: { some: { examId } } },
+        where: {
+          status: 'published',
+          questionExams: { some: { examId } },
+          id: { notIn: usedIds.length ? usedIds : ['00000000-0000-0000-0000-000000000000'] },
+        },
         select: { id: true },
       });
-      if (available.length === 0) throw new NotFoundException('No questions available for this exam');
 
-      const picked = available[Math.floor(Math.random() * available.length)];
+      // Fall back to full pool if all questions have been used already
+      const pool = available.length > 0
+        ? available
+        : await this.prisma.question.findMany({
+            where: { status: 'published', questionExams: { some: { examId } } },
+            select: { id: true },
+          });
+
+      if (pool.length === 0) throw new NotFoundException('No questions available for this exam');
+
+      const picked = pool[Math.floor(Math.random() * pool.length)];
       challenge = await this.prisma.dailyChallenge.create({
         data: { date, examId, questionId: picked.id },
         include: { question: { include: QUESTION_INCLUDE } },
