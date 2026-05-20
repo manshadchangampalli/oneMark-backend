@@ -29,6 +29,8 @@ model User {
 
   // activity
   totalXp            Int        @default(0)
+  totalAttempts      Int        @default(0)
+  totalCorrect       Int        @default(0)
   lastActiveAt       DateTime?
   emailVerifiedAt    DateTime?
 

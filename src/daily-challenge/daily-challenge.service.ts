@@ -218,12 +218,14 @@ export class DailyChallengeService {
         data: { totalSolvers: { increment: 1 } },
       });
 
-      if (xpAwarded > 0) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { totalXp: { increment: xpAwarded } },
-        });
-      }
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          totalAttempts: { increment: 1 },
+          totalCorrect:  { increment: isCorrect ? 1 : 0 },
+          totalXp:       { increment: xpAwarded },
+        },
+      });
 
       return a;
     });

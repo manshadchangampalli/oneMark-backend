@@ -26,6 +26,13 @@ export class UsersService {
   findById(id: string) {
     return this.prisma.user.findFirst({
       where: { id, deletedAt: null },
+      select: {
+        id: true, email: true, name: true,
+        avatarInitial: true, avatarTone: true,
+        school: true, grade: true, targetExam: true,
+        state: true, district: true, role: true,
+        totalXp: true, totalAttempts: true, totalCorrect: true,
+      },
     });
   }
 
