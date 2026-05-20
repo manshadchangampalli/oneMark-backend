@@ -28,26 +28,41 @@ export class PracticeService {
   async createSession(userId: string, dto: CreateSessionDto) {
     const examId = await this.examsService.resolveExamId(userId, dto.examId);
 
-    const where: Record<string, unknown> = {
+    const needed = dto.questionCount ?? 10;
+
+    const baseWhere: Record<string, unknown> = {
       status: 'published',
       questionExams: { some: { examId } },
     };
-    if (dto.subjectId) where.subjectId = dto.subjectId;
-    if (dto.topicId) where.topicId = dto.topicId;
-    if (dto.difficulty && dto.difficulty !== 'mixed') where.difficulty = dto.difficulty;
+    if (dto.subjectId) baseWhere.subjectId = dto.subjectId;
+    if (dto.topicId) baseWhere.topicId = dto.topicId;
+    if (dto.difficulty && dto.difficulty !== 'mixed') baseWhere.difficulty = dto.difficulty;
 
-    const available = await this.prisma.question.findMany({
-      where,
+    // Prefer questions the user hasn't attempted yet
+    const attemptedIds = await this.prisma.attempt.findMany({
+      where: { userId, question: { questionExams: { some: { examId } } } },
+      select: { questionId: true },
+      distinct: ['questionId'],
+    });
+    const excludeIds = attemptedIds.map((a) => a.questionId);
+
+    const freshPool = await this.prisma.question.findMany({
+      where: { ...baseWhere, ...(excludeIds.length ? { id: { notIn: excludeIds } } : {}) },
       select: { id: true },
     });
 
-    if (available.length === 0) {
+    // Fall back to full pool if not enough fresh questions
+    const pool = freshPool.length >= needed
+      ? freshPool
+      : await this.prisma.question.findMany({ where: baseWhere, select: { id: true } });
+
+    if (pool.length === 0) {
       throw new UnprocessableEntityException('No questions available for this filter');
     }
 
-    const selectedIds = shuffle(available.map((q) => q.id)).slice(
+    const selectedIds = shuffle(pool.map((q) => q.id)).slice(
       0,
-      Math.min(dto.questionCount ?? 10, available.length),
+      Math.min(needed, pool.length),
     );
     const count = selectedIds.length;
 
@@ -202,7 +217,7 @@ export class PracticeService {
     const question = await this.prisma.question.findUnique({
       where: { id: questionId },
       include: {
-        currentRevision: { select: { id: true, correctOptionLabel: true, xpReward: true } },
+        currentRevision: { select: { id: true, correctOptionLabel: true, officialExplanation: true, xpReward: true } },
         options: { select: { id: true, label: true } },
       },
     });
@@ -237,12 +252,33 @@ export class PracticeService {
         select: { score: true },
       });
 
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          totalAttempts: { increment: 1 },
+          totalCorrect:  { increment: isCorrect ? 1 : 0 },
+          totalXp:       { increment: xpAwarded },
+        },
+      });
+
+      await tx.userTopicStat.upsert({
+        where: { userId_topicId: { userId, topicId: question.topicId } },
+        create: { userId, topicId: question.topicId, attempted: 1, correct: isCorrect ? 1 : 0 },
+        update: {
+          attempted:       { increment: 1 },
+          correct:         { increment: isCorrect ? 1 : 0 },
+          lastAttemptedAt: new Date(),
+        },
+      });
+
       return { attempt: a, runningScore: updated.score };
     });
 
     return {
       attempt: { id: attempt.id, isCorrect, xpAwarded },
       isCorrect,
+      correctOptionLabel: question.currentRevision.correctOptionLabel,
+      officialExplanation: question.currentRevision.officialExplanation,
       runningScore,
     };
   }
