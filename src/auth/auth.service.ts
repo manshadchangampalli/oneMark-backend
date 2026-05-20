@@ -7,12 +7,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import type { SignupDto } from './dto/signup.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly users: UsersService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
@@ -52,6 +54,14 @@ export class AuthService {
       state: dto.state,
       district: dto.district,
     });
+
+    // Auto-enrol in the selected exam so ExamRequiredGuard passes
+    const exam = await this.prisma.exam.findUnique({ where: { code: dto.targetExam } });
+    if (exam) {
+      await this.prisma.userExam.create({
+        data: { userId: user.id, examId: exam.id, isPrimary: true },
+      });
+    }
 
     return this.issueTokens(user.id, user.email!, metadata);
   }
