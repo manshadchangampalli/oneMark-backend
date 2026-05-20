@@ -74,11 +74,12 @@ export class AuthController {
   }
 
   private setRefreshCookie(res: Response, token: string) {
+    const prod = process.env.NODE_ENV === 'production';
     res.cookie('refresh_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      secure: prod,
+      sameSite: prod ? 'none' : 'strict', // 'none' required for cross-origin on Vercel
+      maxAge: 7 * 24 * 60 * 60 * 1000,   // 7 days — matches JWT_REFRESH_EXPIRES_IN
       path: '/',
     });
   }

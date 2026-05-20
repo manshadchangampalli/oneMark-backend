@@ -30,8 +30,11 @@ export class AuthService {
   }
 
   async signup(dto: SignupDto, metadata?: { userAgent?: string; ipAddress?: string }) {
-    console.log("🚀 ~ AuthService ~ signup ~ dto:", dto)
     if (!dto.targetExam) throw new BadRequestException('Target exam is required');
+    if (!dto.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dto.email))
+      throw new BadRequestException('Valid email is required');
+    if (!dto.password || dto.password.length < 8)
+      throw new BadRequestException('Password must be at least 8 characters');
     const existing = await this.users.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 
@@ -116,7 +119,7 @@ export class AuthService {
 
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days — matches cookie & JWT_REFRESH_EXPIRES_IN
 
     if (sessionId) {
       // Update existing session (refresh)
