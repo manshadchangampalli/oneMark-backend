@@ -9,6 +9,8 @@ import { DailyAttemptDto } from './dto/submit-attempt.dto';
 
 // Question fields returned to the client (without correct answer)
 const QUESTION_INCLUDE = {
+  subject: { select: { label: true } },
+  topic:   { select: { label: true } },
   currentRevision: {
     select: {
       id: true,
@@ -114,6 +116,8 @@ export class DailyChallengeService {
       totalSolvers: challenge.totalSolvers,
       question: {
         id: q.id,
+        subject: q.subject?.label ?? null,
+        topic: q.topic?.label ?? null,
         difficulty: q.difficulty,
         type: q.type,
         xpReward: q.xpReward,
