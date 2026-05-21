@@ -140,7 +140,14 @@ export class PracticeService {
           include: {
             question: {
               include: {
-                currentRevision: { select: { id: true, prompt: true } },
+                currentRevision: {
+                  select: {
+                    id: true,
+                    prompt: true,
+                    correctOptionLabel: true,
+                    officialExplanation: true,
+                  },
+                },
                 options: {
                   select: { id: true, label: true, text: true, sub: true, sortOrder: true },
                   orderBy: { sortOrder: 'asc' },
@@ -160,25 +167,44 @@ export class PracticeService {
     const attemptMap = new Map(session.attempts.map((a) => [a.questionId, a]));
 
     return {
-      id: session.id,
-      mode: session.mode,
-      examId: session.examId,
+      session: {
+        id: session.id,
+        mode: session.mode,
+        examId: session.examId,
+        questionCount: session.total,
+        timeLimitSec: session.timeLimitSec,
+        startedAt: session.startedAt,
+      },
       score: session.score,
       total: session.total,
-      startedAt: session.startedAt,
       finishedAt: session.finishedAt,
       timeSpentSec: session.timeSpentSec,
       questions: session.sessionQuestions.map((sq) => {
         const attempt = attemptMap.get(sq.questionId);
+        const rev = sq.question.currentRevision;
         return {
           sortOrder: sq.sortOrder,
           id: sq.question.id,
           difficulty: sq.question.difficulty,
           type: sq.question.type,
-          revision: sq.question.currentRevision,
+          xpReward: sq.question.xpReward,
+          // Only reveal correct answer + explanation for attempted questions
+          revision: rev
+            ? {
+                id: rev.id,
+                prompt: rev.prompt,
+                ...(attempt
+                  ? {
+                      correctOptionLabel: rev.correctOptionLabel,
+                      officialExplanation: rev.officialExplanation,
+                    }
+                  : {}),
+              }
+            : null,
           options: sq.question.options,
           myStatus: attempt ? (attempt.isCorrect ? 'correct' : 'incorrect') : 'unattempted',
           mySelectedOptionId: attempt?.selectedOptionId ?? null,
+          myXpAwarded: attempt?.xpAwarded ?? null,
         };
       }),
     };
