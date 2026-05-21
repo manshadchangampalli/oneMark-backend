@@ -26,6 +26,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "seed:admin": "ts-node prisma/seed-admin.ts",
     "db:studio": "prisma studio",
     "db:reset": "docker compose down -v && docker compose up -d && prisma migrate dev",
     "setup": "cp -n .env.example .env ; docker compose up -d && pnpm install && pnpm db:migrate"
