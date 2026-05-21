@@ -10,6 +10,7 @@ import { AdminSubjectsController } from './admin-subjects.controller';
 import { AdminSubjectsService } from './admin-subjects.service';
 import { AdminTopicsController } from './admin-topics.controller';
 import { AdminTopicsService } from './admin-topics.service';
+import { AdminStatsController } from './admin-stats.controller';
 
 @Module({
   imports: [PrismaModule],
@@ -19,6 +20,7 @@ import { AdminTopicsService } from './admin-topics.service';
     AdminExamsController,
     AdminSubjectsController,
     AdminTopicsController,
+    AdminStatsController,
   ],
   providers: [
     AdminQuestionsService,

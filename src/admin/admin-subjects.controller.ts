@@ -23,8 +23,11 @@ export class AdminSubjectsController {
   constructor(private readonly service: AdminSubjectsService) {}
 
   @Get()
-  list(@Query('includeArchived') includeArchived?: string) {
-    return this.service.list({ includeArchived: includeArchived === 'true' });
+  list(
+    @Query('examId')          examId?: string,
+    @Query('includeArchived') includeArchived?: string,
+  ) {
+    return this.service.list({ examId, includeArchived: includeArchived === 'true' });
   }
 
   @Get(':id')

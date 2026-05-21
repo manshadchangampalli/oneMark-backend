@@ -6,9 +6,12 @@ import type { CreateSubjectDto, UpdateSubjectDto } from './admin-subjects.contro
 export class AdminSubjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list({ includeArchived }: { includeArchived: boolean }) {
+  async list({ examId, includeArchived }: { examId?: string; includeArchived: boolean }) {
     const rows = await this.prisma.subject.findMany({
-      where: includeArchived ? {} : { archivedAt: null },
+      where: {
+        ...(includeArchived ? {} : { archivedAt: null }),
+        ...(examId ? { subjectExams: { some: { examId } } } : {}),
+      },
       orderBy: [{ archivedAt: 'asc' }, { sortOrder: 'asc' }, { label: 'asc' }],
       select: {
         id: true, code: true, label: true, short: true, colorHex: true, sortOrder: true,
