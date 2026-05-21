@@ -5,10 +5,12 @@ model Subject {
   short        String
   colorHex     String
   sortOrder    Int    @default(0)
+  archivedAt   DateTime?
 
-  subjectExams SubjectExam[]
-  topics       Topic[]
-  questions    Question[]
+  subjectExams     SubjectExam[]
+  topics           Topic[]
+  questions        Question[]
+  practiceSessions PracticeSession[]
 
   createdAt DateTime @default(now())
 }

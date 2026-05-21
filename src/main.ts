@@ -5,8 +5,19 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const allowedOrigins = [
+    'https://one-mark-frontend.vercel.app',
+    'https://one-mark-dashboard.vercel.app',
+    process.env.DASHBOARD_ORIGIN,
+  ].filter(Boolean) as string[];
   app.enableCors({
-    origin: 'https://one-mark-frontend.vercel.app',
+    origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+      // Allow same-origin / curl (no Origin header) and any localhost dev port
+      if (!origin || /^http:\/\/localhost(:\d+)?$/.test(origin) || allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+      cb(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

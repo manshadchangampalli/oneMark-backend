@@ -31,6 +31,8 @@ model PracticeSession {
 
   user             User              @relation(fields: [userId], references: [id])
   exam             Exam              @relation(fields: [examId], references: [id])
+  subject          Subject?          @relation(fields: [subjectId], references: [id])
+  topic            Topic?            @relation(fields: [topicId], references: [id])
   sessionQuestions SessionQuestion[]
   attempts         Attempt[]
 

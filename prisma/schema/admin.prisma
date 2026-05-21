@@ -1,0 +1,33 @@
+model AdminUser {
+  id          String   @id @default(uuid()) @db.Uuid
+
+  email       String   @unique
+  name        String
+  password    String
+
+  isActive    Boolean  @default(true)
+  lastLoginAt DateTime?
+
+  sessions    AdminSession[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([email])
+}
+
+model AdminSession {
+  id                 String    @id @default(uuid()) @db.Uuid
+  adminId            String    @db.Uuid
+  hashedRefreshToken String
+  userAgent          String?
+  ipAddress          String?
+  lastUsedAt         DateTime  @default(now())
+  expiresAt          DateTime?
+  createdAt          DateTime  @default(now())
+
+  admin              AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([hashedRefreshToken])
+}

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import * as bcrypt from 'bcrypt';
 import { PrismaClient } from '../src/generated/prisma';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -846,6 +847,19 @@ async function main() {
     });
   }
   console.log(`  Kerala: ${KERALA_DISTRICTS.length} districts`);
+
+  // ── Admin user ──
+  console.log('Seeding admin user...');
+  const adminEmail    = process.env.ADMIN_SEED_EMAIL    ?? 'admin@onemark.app';
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD ?? 'admin123';
+  const adminName     = process.env.ADMIN_SEED_NAME     ?? 'Admin';
+  const hashed = await bcrypt.hash(adminPassword, 10);
+  await prisma.adminUser.upsert({
+    where:  { email: adminEmail },
+    create: { email: adminEmail, name: adminName, password: hashed },
+    update: { name: adminName, password: hashed, isActive: true },
+  });
+  console.log(`  ${adminEmail}`);
 
   console.log('\nDone. ✓');
 }

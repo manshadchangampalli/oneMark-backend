@@ -4,6 +4,7 @@ model Exam {
   label       String           // 'JEE Advanced 2026'
   description String?
   isActive    Boolean  @default(true)
+  archivedAt  DateTime?
 
   userExams        UserExam[]
   subjectExams     SubjectExam[]

@@ -5,11 +5,13 @@ model Topic {
   label         String
   sortOrder     Int    @default(0)
   questionCount Int    @default(0) // denormalized; updated when questions are added/removed
+  archivedAt    DateTime?
 
-  subject        Subject          @relation(fields: [subjectId], references: [id])
-  topicExams     TopicExam[]
-  questions      Question[]
-  userTopicStats UserTopicStat[]
+  subject          Subject           @relation(fields: [subjectId], references: [id])
+  topicExams       TopicExam[]
+  questions        Question[]
+  userTopicStats   UserTopicStat[]
+  practiceSessions PracticeSession[]
 
   createdAt DateTime @default(now())
 

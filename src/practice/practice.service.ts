@@ -359,7 +359,9 @@ export class PracticeService {
         timeSpentSec: true,
         startedAt: true,
         finishedAt: true,
-        exam: { select: { id: true, code: true, label: true } },
+        exam:    { select: { id: true, code: true, label: true } },
+        subject: { select: { id: true, label: true } },
+        topic:   { select: { id: true, label: true } },
       },
     });
 
