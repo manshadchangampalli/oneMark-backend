@@ -9,24 +9,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "methods": ["OPTIONS"],
-      "headers": {
-        "Access-Control-Allow-Origin": "https://one-mark-frontend.vercel.app",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Credentials": "true"
-      },
-      "status": 200
-    },
-    {
-      "src": "/(.*)",
-      "dest": "src/main.ts",
-      "headers": {
-        "Access-Control-Allow-Origin": "https://one-mark-frontend.vercel.app",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Credentials": "true"
-      }
+      "dest": "src/main.ts"
     }
   ]
 }
