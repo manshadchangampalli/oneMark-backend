@@ -35,6 +35,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Req() req, @Res({ passthrough: true }) res) {
+    console.log({ req: req.body })
     const user = (req as Request).user as { id: string; email: string };
     const metadata = {
       userAgent: req.get('user-agent'),
