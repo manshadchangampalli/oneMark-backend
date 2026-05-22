@@ -32,8 +32,42 @@ export class UsersService {
         school: true, grade: true, targetExam: true,
         state: true, district: true, role: true,
         totalXp: true, totalAttempts: true, totalCorrect: true,
+        currentStreak: true, longestStreak: true,
       },
     });
+  }
+
+  updateProfile(id: string, data: { name?: string; school?: string | null; grade?: string | null }) {
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.school !== undefined ? { school: data.school } : {}),
+        ...(data.grade !== undefined ? { grade: data.grade } : {}),
+      },
+      select: {
+        id: true, email: true, name: true,
+        avatarInitial: true, avatarTone: true,
+        school: true, grade: true, targetExam: true,
+        state: true, district: true, role: true,
+        totalXp: true, totalAttempts: true, totalCorrect: true,
+        currentStreak: true, longestStreak: true,
+      },
+    });
+  }
+
+  async getStats(id: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: { totalAttempts: true, totalCorrect: true, currentStreak: true, longestStreak: true },
+    });
+    if (!user) return { solved: 0, accuracy: 0, streak: 0, longestStreak: 0 };
+    return {
+      solved:        user.totalAttempts,
+      accuracy:      user.totalAttempts > 0 ? Math.round((user.totalCorrect / user.totalAttempts) * 100) : 0,
+      streak:        user.currentStreak,
+      longestStreak: user.longestStreak,
+    };
   }
 
   create(data: CreateUserData) {

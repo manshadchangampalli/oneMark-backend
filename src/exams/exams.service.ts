@@ -62,11 +62,14 @@ export class ExamsService {
 
     return this.prisma.$transaction(async (tx) => {
       await tx.userExam.updateMany({ where: { userId, isPrimary: true }, data: { isPrimary: false } });
-      return tx.userExam.update({
+      const updated = await tx.userExam.update({
         where: { userId_examId: { userId, examId } },
         data: { isPrimary: true },
         include: { exam: { select: { id: true, code: true, label: true } } },
       });
+      // Keep user.targetExam in sync so /auth/me reflects the switch
+      await tx.user.update({ where: { id: userId }, data: { targetExam: updated.exam.code } });
+      return updated;
     });
   }
 
