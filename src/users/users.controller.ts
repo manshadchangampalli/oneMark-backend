@@ -4,15 +4,15 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 
 export class UpdateMeDto {
-  name?:   string;
+  name?: string;
   school?: string | null;
-  grade?:  string | null;
+  grade?: string | null;
 }
 
 @UseGuards(JwtAuthGuard)
 @Controller('users/me')
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(private readonly users: UsersService) { }
 
   @Patch()
   update(@Req() req, @Body() dto: UpdateMeDto) {
@@ -31,5 +31,11 @@ export class UsersController {
     const user = (req as Request).user as { id: string };
     const parsed = days ? parseInt(days, 10) : 365;
     return this.users.getActivity(user.id, Number.isFinite(parsed) ? parsed : 365);
+  }
+
+  @Get('progress')
+  progress(@Req() req) {
+    const user = (req as Request).user as { id: string };
+    return this.users.getProgress(user.id);
   }
 }

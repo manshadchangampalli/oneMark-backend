@@ -74,12 +74,12 @@ export class UsersService {
     return rows.map((r) => {
       const count = Number(r.cnt);
       let level = 0;
-      if (count >= 25)     level = 4;
+      if (count >= 25) level = 4;
       else if (count >= 10) level = 3;
-      else if (count >= 4)  level = 2;
-      else if (count >= 1)  level = 1;
+      else if (count >= 4) level = 2;
+      else if (count >= 1) level = 1;
       return {
-        date:  r.day.toISOString().slice(0, 10), // YYYY-MM-DD
+        date: r.day.toISOString().slice(0, 10), // YYYY-MM-DD
         count,
         level,
       };
@@ -93,9 +93,9 @@ export class UsersService {
     });
     if (!user) return { solved: 0, accuracy: 0, streak: 0, longestStreak: 0 };
     return {
-      solved:        user.totalAttempts,
-      accuracy:      user.totalAttempts > 0 ? Math.round((user.totalCorrect / user.totalAttempts) * 100) : 0,
-      streak:        user.currentStreak,
+      solved: user.totalAttempts,
+      accuracy: user.totalAttempts > 0 ? Math.round((user.totalCorrect / user.totalAttempts) * 100) : 0,
+      streak: user.currentStreak,
       longestStreak: user.longestStreak,
     };
   }
@@ -144,5 +144,15 @@ export class UsersService {
     return this.prisma.userSession.delete({
       where: { id },
     });
+  }
+
+  async getProgress(id: string) {
+    const userData = await this.prisma?.user.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+      },
+    });
+    console.log({ userData })
   }
 }
