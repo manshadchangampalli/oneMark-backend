@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
@@ -24,5 +24,12 @@ export class UsersController {
   stats(@Req() req) {
     const user = (req as Request).user as { id: string };
     return this.users.getStats(user.id);
+  }
+
+  @Get('activity')
+  activity(@Req() req, @Query('days') days?: string) {
+    const user = (req as Request).user as { id: string };
+    const parsed = days ? parseInt(days, 10) : 365;
+    return this.users.getActivity(user.id, Number.isFinite(parsed) ? parsed : 365);
   }
 }

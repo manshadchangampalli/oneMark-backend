@@ -56,6 +56,36 @@ export class UsersService {
     });
   }
 
+  async getActivity(id: string, days: number) {
+    const safeDays = Math.min(Math.max(days, 7), 730);
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - (safeDays - 1));
+    since.setUTCHours(0, 0, 0, 0);
+
+    const rows = await this.prisma.$queryRaw<{ day: Date; cnt: bigint }[]>`
+      SELECT DATE("attemptedAt") AS day, COUNT(*)::bigint AS cnt
+      FROM "Attempt"
+      WHERE "userId" = ${id}::uuid
+        AND "attemptedAt" >= ${since}
+      GROUP BY day
+      ORDER BY day ASC
+    `;
+
+    return rows.map((r) => {
+      const count = Number(r.cnt);
+      let level = 0;
+      if (count >= 25)     level = 4;
+      else if (count >= 10) level = 3;
+      else if (count >= 4)  level = 2;
+      else if (count >= 1)  level = 1;
+      return {
+        date:  r.day.toISOString().slice(0, 10), // YYYY-MM-DD
+        count,
+        level,
+      };
+    });
+  }
+
   async getStats(id: string) {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
