@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExamsService } from '../exams/exams.service';
+import { StreakService } from '../users/streak.service';
 import { DailyAttemptDto } from './dto/submit-attempt.dto';
 
 const DAILY_CHALLENGE_BONUS = 20; // XP bonus on top of the question's base reward
@@ -33,6 +34,7 @@ export class DailyChallengeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly examsService: ExamsService,
+    private readonly streakService: StreakService,
   ) {}
 
   private today(): Date {
@@ -239,6 +241,9 @@ export class DailyChallengeService {
 
       return a;
     });
+
+    // Completing today's daily challenge counts as a streak-day, regardless of correctness.
+    await this.streakService.bump(userId, new Date());
 
     return {
       attempt: { id: attempt.id, isCorrect, xpAwarded },

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExamsService } from '../exams/exams.service';
+import { StreakService } from '../users/streak.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 
@@ -23,6 +24,7 @@ export class PracticeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly examsService: ExamsService,
+    private readonly streakService: StreakService,
   ) {}
 
   async createSession(userId: string, dto: CreateSessionDto) {
@@ -337,7 +339,7 @@ export class PracticeService {
       session.finishedAt = now;
       session.timeSpentSec = timeSpentSec;
 
-      await this.bumpStreak(userId, now);
+      await this.streakService.bump(userId, now);
     }
 
     return this.buildFinishResponse(session as typeof session & { timeSpentSec: number });
@@ -377,45 +379,6 @@ export class PracticeService {
       })),
       nextCursor: hasMore ? data[data.length - 1].id : null,
     };
-  }
-
-  private async bumpStreak(userId: string, when: Date) {
-    // Use UTC date to avoid TZ drift
-    const today = new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate()));
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { currentStreak: true, longestStreak: true, lastStreakDate: true },
-    });
-    if (!user) return;
-
-    const last = user.lastStreakDate
-      ? new Date(Date.UTC(
-          user.lastStreakDate.getUTCFullYear(),
-          user.lastStreakDate.getUTCMonth(),
-          user.lastStreakDate.getUTCDate(),
-        ))
-      : null;
-
-    let nextStreak: number;
-    if (!last) {
-      nextStreak = 1;
-    } else {
-      const diffDays = Math.round((today.getTime() - last.getTime()) / (24 * 60 * 60 * 1000));
-      if (diffDays === 0)      return;                              // already counted today
-      else if (diffDays === 1) nextStreak = user.currentStreak + 1; // consecutive day
-      else                      nextStreak = 1;                     // streak broken
-    }
-
-    const nextLongest = Math.max(user.longestStreak, nextStreak);
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        currentStreak:  nextStreak,
-        longestStreak:  nextLongest,
-        lastStreakDate: today,
-      },
-    });
   }
 
   private buildFinishResponse(session: {
