@@ -38,4 +38,10 @@ export class UsersController {
     const user = (req as Request).user as { id: string };
     return this.users.getProgress(user.id);
   }
+
+  @Get('mastery')
+  mastery(@Req() req) {
+    const user = (req as Request).user as { id: string };
+    return this.users.getMastery(user.id);
+  }
 }

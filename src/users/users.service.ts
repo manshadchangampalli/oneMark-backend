@@ -180,6 +180,37 @@ export class UsersService {
     };
   }
 
+  /** Per-subject mastery for a user, rolled up from UserTopicStat (one row per user-topic). */
+  async getMastery(userId: string) {
+    const rows = await this.prisma.$queryRaw<{
+      id: string;
+      label: string;
+      colorHex: string;
+      attempted: number;
+      correct: number;
+    }[]>`
+      SELECT
+        s.id, s.label, s."colorHex",
+        SUM(uts.attempted)::int AS attempted,
+        SUM(uts.correct)::int   AS correct
+      FROM "UserTopicStat" uts
+      JOIN "Topic"   t ON t.id = uts."topicId"
+      JOIN "Subject" s ON s.id = t."subjectId"
+      WHERE uts."userId" = ${userId}::uuid
+      GROUP BY s.id, s.label, s."colorHex"
+      ORDER BY attempted DESC
+    `;
+
+    return rows.map((r) => ({
+      subjectId: r.id,
+      label:     r.label,
+      colorHex:  r.colorHex,
+      attempted: r.attempted,
+      correct:   r.correct,
+      pct:       r.attempted > 0 ? Math.round((r.correct / r.attempted) * 100) : 0,
+    }));
+  }
+
   /** Top users ranked by totalXp, scoped to the requester's primary exam by default. */
   async getLeaderboard(userId: string, scope: 'exam' | 'global' = 'exam', limit = 10) {
     const me = await this.prisma.user.findUnique({
