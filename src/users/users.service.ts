@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 type CreateUserData = {
@@ -147,31 +147,77 @@ export class UsersService {
   }
 
   async getProgress(id: string) {
-    const userData = await this.prisma?.user.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-      },
+    const user = await this.prisma.user.findUnique({
+      where: { id },
       select: {
-        id: true,
-        totalCorrect: true,
+        deletedAt:     true,
+        totalCorrect:  true,
         totalAttempts: true,
         currentStreak: true,
-      }
+        totalXp:       true,
+        userExams:     { where: { isPrimary: true }, select: { examId: true } },
+      },
+    });
+    if (!user || user.deletedAt) throw new NotFoundException('User not found');
+
+    const examId = user.userExams[0]?.examId ?? null;
+    const examFilter = examId
+      ? { userExams: { some: { examId, isPrimary: true } } }
+      : {};
+
+    // Rank = (users in scope with higher XP) + 1
+    const ahead = await this.prisma.user.count({
+      where: { deletedAt: null, totalXp: { gt: user.totalXp }, ...examFilter },
     });
 
-    if (!userData) {
-      return {
-        solved: 0,
-        accuracy: "0%",
-        streak: 0,
-      }
-    }
-    const stats = {
-      solved: userData?.totalAttempts,
-      accuracy: userData?.totalAttempts > 0 ? `${Math.round((userData?.totalCorrect / userData?.totalAttempts) * 100)}%` : "0%",
-      streak: userData?.currentStreak,
+    return {
+      solved:   user.totalAttempts,
+      accuracy: user.totalAttempts > 0
+        ? `${Math.round((user.totalCorrect / user.totalAttempts) * 100)}%`
+        : '0%',
+      streak: user.currentStreak,
+      rank:   ahead + 1,
     };
-    return stats
+  }
+
+  /** Top users ranked by totalXp, scoped to the requester's primary exam by default. */
+  async getLeaderboard(userId: string, scope: 'exam' | 'global' = 'exam', limit = 10) {
+    const me = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        deletedAt: true,
+        userExams: { where: { isPrimary: true }, select: { examId: true } },
+      },
+    });
+    if (!me || me.deletedAt) throw new NotFoundException('User not found');
+
+    const examId = scope === 'exam' ? me.userExams[0]?.examId ?? null : null;
+    const where = {
+      deletedAt: null,
+      ...(examId ? { userExams: { some: { examId, isPrimary: true } } } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { totalXp: 'desc' },
+        take: Math.min(Math.max(limit, 1), 100),
+        select: { id: true, name: true, avatarInitial: true, totalXp: true },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      scope:  examId ? 'exam' : 'global',
+      total,
+      top: rows.map((u, i) => ({
+        rank:          i + 1,
+        userId:        u.id,
+        name:          u.name,
+        avatarInitial: u.avatarInitial,
+        xp:            u.totalXp,
+        isMe:          u.id === userId,
+      })),
+    };
   }
 }

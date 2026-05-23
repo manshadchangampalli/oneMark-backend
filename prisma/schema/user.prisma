@@ -59,4 +59,5 @@ model User {
   @@index([email])
   @@index([lastActiveAt])
   @@index([deletedAt])
+  @@index([totalXp])
 }
