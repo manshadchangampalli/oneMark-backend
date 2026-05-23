@@ -152,7 +152,26 @@ export class UsersService {
         id,
         deletedAt: null,
       },
+      select: {
+        id: true,
+        totalCorrect: true,
+        totalAttempts: true,
+        currentStreak: true,
+      }
     });
-    console.log({ userData })
+
+    if (!userData) {
+      return {
+        solved: 0,
+        accuracy: "0%",
+        streak: 0,
+      }
+    }
+    const stats = {
+      solved: userData?.totalAttempts,
+      accuracy: userData?.totalAttempts > 0 ? `${Math.round((userData?.totalCorrect / userData?.totalAttempts) * 100)}%` : "0%",
+      streak: userData?.currentStreak,
+    };
+    return stats
   }
 }
