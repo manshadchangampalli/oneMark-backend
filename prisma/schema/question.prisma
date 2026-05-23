@@ -37,6 +37,7 @@ model Question {
   sessionQuestions SessionQuestion[]
   attempts         Attempt[]
   dailyChallenges  DailyChallenge[]
+  bookmarks        Bookmark[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

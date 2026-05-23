@@ -13,6 +13,7 @@ import { QuestionsModule } from './questions/questions.module';
 import { PracticeModule } from './practice/practice.module';
 import { DailyChallengeModule } from './daily-challenge/daily-challenge.module';
 import { LocationModule } from './location/location.module';
+import { BookmarksModule } from './bookmarks/bookmarks.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { LocationModule } from './location/location.module';
     PracticeModule,
     DailyChallengeModule,
     LocationModule,
+    BookmarksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
