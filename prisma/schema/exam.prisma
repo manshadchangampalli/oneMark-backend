@@ -20,10 +20,11 @@ model ExamCategory {
 
 model Exam {
   id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique // 'jee', 'neet', 'ib', 'a-levels', 'psc', 'generic'
-  label       String           // 'JEE Advanced 2026'
+  code        String   @unique // 'psc-ldc', 'psc-police', 'jee-main', etc.
+  label       String           // 'LDC', 'Police Constable', 'JEE Main'
   description String?
   categoryId  String?  @db.Uuid    // nullable for now; backfilled then enforced later
+  tier        String?                 // '10th Level' | '+2 Level' | 'Degree Level' — within a category
   isActive    Boolean  @default(true)
   archivedAt  DateTime?
 
@@ -38,6 +39,7 @@ model Exam {
   createdAt   DateTime @default(now())
 
   @@index([categoryId])
+  @@index([categoryId, tier])
 }
 
 model UserExam {
