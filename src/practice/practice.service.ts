@@ -28,7 +28,7 @@ export class PracticeService {
   ) {}
 
   async createSession(userId: string, dto: CreateSessionDto) {
-    const examId = await this.examsService.resolveExamId(userId, dto.examId);
+    const { sessionExamId, poolExamIds } = await this.resolveExamPool(userId, dto.examId);
 
     const needed = dto.questionCount ?? 10;
     let selectedIds: string[];
@@ -51,7 +51,7 @@ export class PracticeService {
     } else {
       const baseWhere: Record<string, unknown> = {
         status: 'published',
-        questionExams: { some: { examId } },
+        questionExams: { some: { examId: { in: poolExamIds } } },
       };
       if (dto.subjectId) baseWhere.subjectId = dto.subjectId;
       if (dto.topicId) baseWhere.topicId = dto.topicId;
@@ -59,7 +59,7 @@ export class PracticeService {
 
       // Prefer questions the user hasn't attempted yet
       const attemptedIds = await this.prisma.attempt.findMany({
-        where: { userId, question: { questionExams: { some: { examId } } } },
+        where: { userId, question: { questionExams: { some: { examId: { in: poolExamIds } } } } },
         select: { questionId: true },
         distinct: ['questionId'],
       });
@@ -91,7 +91,7 @@ export class PracticeService {
       const sess = await tx.practiceSession.create({
         data: {
           userId,
-          examId,
+          examId: sessionExamId,
           mode: dto.mode,
           subjectId: dto.subjectId ?? null,
           topicId: dto.topicId ?? null,
@@ -403,6 +403,59 @@ export class PracticeService {
       })),
       nextCursor: hasMore ? data[data.length - 1].id : null,
     };
+  }
+
+  /**
+   * Decides which exam IDs to draw questions from.
+   *
+   * - If `explicitExamId` is provided → precise mode: just that one exam
+   *   (used when the UI lets the user say "only LDC questions").
+   * - Otherwise → broad mode: the user's primary exam PLUS all sibling
+   *   exams in the same category+tier (e.g. a Police aspirant gets
+   *   questions tagged for LDC / LGS / VEO / Fireman too, since the
+   *   10th-Level syllabus is shared).
+   *
+   * `sessionExamId` is what we store on the PracticeSession row so each
+   * session is still attributed to a single exam; `poolExamIds` is the
+   * filter used to actually pick questions.
+   */
+  private async resolveExamPool(
+    userId: string,
+    explicitExamId?: string,
+  ): Promise<{ sessionExamId: string; poolExamIds: string[] }> {
+    // Precise mode — caller asked for a specific exam
+    if (explicitExamId) {
+      const enrolment = await this.prisma.userExam.findUnique({
+        where: { userId_examId: { userId, examId: explicitExamId } },
+      });
+      if (!enrolment) {
+        throw new UnprocessableEntityException({ code: 'EXAM_REQUIRED' });
+      }
+      return { sessionExamId: explicitExamId, poolExamIds: [explicitExamId] };
+    }
+
+    // Broad mode — primary exam + same-tier siblings
+    const primary = await this.prisma.userExam.findFirst({
+      where: { userId, isPrimary: true },
+      include: { exam: { select: { id: true, tier: true, categoryId: true } } },
+    });
+    if (!primary) {
+      throw new UnprocessableEntityException({ code: 'EXAM_REQUIRED' });
+    }
+
+    const { tier, categoryId } = primary.exam;
+    if (!tier || !categoryId) {
+      // No tier metadata → fall back to single-exam pool
+      return { sessionExamId: primary.examId, poolExamIds: [primary.examId] };
+    }
+
+    const siblings = await this.prisma.exam.findMany({
+      where: { categoryId, tier, archivedAt: null, isActive: true },
+      select: { id: true },
+    });
+    const poolIds = siblings.length > 0 ? siblings.map((s) => s.id) : [primary.examId];
+
+    return { sessionExamId: primary.examId, poolExamIds: poolIds };
   }
 
   private buildFinishResponse(session: {
