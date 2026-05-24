@@ -1,11 +1,33 @@
+model ExamCategory {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique          // 'psc' | 'jee' | 'neet'
+  label       String                       // 'Kerala PSC'
+  description String?
+  colorHex    String?                      // for picker / theming
+  iconKey     String?                      // optional icon hint
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  archivedAt  DateTime?
+
+  exams       Exam[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([code])
+  @@index([sortOrder])
+}
+
 model Exam {
   id          String   @id @default(uuid()) @db.Uuid
   code        String   @unique // 'jee', 'neet', 'ib', 'a-levels', 'psc', 'generic'
   label       String           // 'JEE Advanced 2026'
   description String?
+  categoryId  String?  @db.Uuid    // nullable for now; backfilled then enforced later
   isActive    Boolean  @default(true)
   archivedAt  DateTime?
 
+  category         ExamCategory?     @relation(fields: [categoryId], references: [id])
   userExams        UserExam[]
   subjectExams     SubjectExam[]
   topicExams       TopicExam[]
@@ -14,6 +36,8 @@ model Exam {
   dailyChallenges  DailyChallenge[]
 
   createdAt   DateTime @default(now())
+
+  @@index([categoryId])
 }
 
 model UserExam {
