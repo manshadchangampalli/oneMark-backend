@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AdminJwtAuthGuard } from '../admin-auth/guards/admin-jwt-auth.guard';
-import { AdminQuestionsService, type CreateQuestionInput } from './admin-questions.service';
+import { AdminQuestionsService, type CreateQuestionInput, type BulkRowInput } from './admin-questions.service';
 
 export class CreateQuestionDto implements CreateQuestionInput {
   subjectId:           string;
@@ -49,5 +49,12 @@ export class AdminQuestionsController {
   create(@Req() req, @Body() dto: CreateQuestionDto) {
     const admin = (req as Request).user as { id: string };
     return this.service.create(admin.id, dto);
+  }
+
+  // POST /admin/questions/bulk  { questions: BulkRowInput[] }
+  @Post('bulk')
+  bulkCreate(@Req() req, @Body() body: { questions: BulkRowInput[] }) {
+    const admin = (req as Request).user as { id: string };
+    return this.service.bulkCreate(admin.id, body?.questions ?? []);
   }
 }

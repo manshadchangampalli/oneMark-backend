@@ -21,6 +21,28 @@ export interface CreateQuestionInput {
   officialExplanation?: { steps: string[] } | null;
 }
 
+/** Same as CreateQuestionInput but every ID can be supplied as a *code*
+ *  (subject.code, topic.code, exam.code) — much friendlier for JSON / CSV
+ *  uploads, since admins don't know UUIDs by heart. */
+export interface BulkRowInput extends Partial<CreateQuestionInput> {
+  subjectCode?:  string;
+  topicCode?:    string;
+  examCodes?:    string[];
+  // All the fields from CreateQuestionInput are optional here so we can
+  // gracefully report row-level validation issues rather than 400 the
+  // whole batch.
+}
+
+export interface BulkImportResult {
+  total:     number;
+  succeeded: number;
+  failed:    number;
+  rows: Array<
+    | { index: number; ok: true;  questionId: string }
+    | { index: number; ok: false; error: string }
+  >;
+}
+
 interface ListParams {
   subjectId?:  string;
   topicId?:    string;
@@ -196,6 +218,97 @@ export class AdminQuestionsService {
 
     // Return full detail so the client can use it directly
     return this.detail(questionId);
+  }
+
+  /** Bulk import — resolves codes → ids once, then runs the normal create
+   *  per row in its own transaction. One bad row never kills the batch. */
+  async bulkCreate(adminId: string, rows: BulkRowInput[]): Promise<BulkImportResult> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new BadRequestException('No rows to import');
+    }
+    if (rows.length > 200) {
+      throw new BadRequestException('Cap is 200 rows per request');
+    }
+
+    // 1. Collect every unique code referenced across the batch
+    const subjectCodes = new Set<string>();
+    const topicCodes   = new Set<string>();
+    const examCodes    = new Set<string>();
+    for (const r of rows) {
+      if (r.subjectCode) subjectCodes.add(r.subjectCode);
+      if (r.topicCode)   topicCodes.add(r.topicCode);
+      r.examCodes?.forEach(c => examCodes.add(c));
+    }
+
+    // 2. One round-trip per table to resolve them all
+    type CodeRow = { id: string; code: string };
+    const [subjects, topics, exams] = await Promise.all([
+      subjectCodes.size
+        ? this.prisma.subject.findMany({
+            where: { code: { in: [...subjectCodes] }, archivedAt: null },
+            select: { id: true, code: true },
+          })
+        : Promise.resolve<CodeRow[]>([]),
+      topicCodes.size
+        ? this.prisma.topic.findMany({
+            where: { code: { in: [...topicCodes] }, archivedAt: null },
+            select: { id: true, code: true },
+          })
+        : Promise.resolve<CodeRow[]>([]),
+      examCodes.size
+        ? this.prisma.exam.findMany({
+            where: { code: { in: [...examCodes] }, archivedAt: null },
+            select: { id: true, code: true },
+          })
+        : Promise.resolve<CodeRow[]>([]),
+    ]);
+    const subjectByCode = new Map<string, string>(subjects.map(s => [s.code, s.id]));
+    const topicByCode   = new Map<string, string>(topics  .map(t => [t.code, t.id]));
+    const examByCode    = new Map<string, string>(exams   .map(e => [e.code, e.id]));
+
+    // 3. Process each row independently — collect results
+    const result: BulkImportResult = { total: rows.length, succeeded: 0, failed: 0, rows: [] };
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        // Resolve codes → ids; row-level error if a code can't be matched
+        const subjectId = r.subjectId ?? (r.subjectCode ? subjectByCode.get(r.subjectCode) : undefined);
+        const topicId   = r.topicId   ?? (r.topicCode   ? topicByCode  .get(r.topicCode)   : undefined);
+        const examIds   = r.examIds ?? r.examCodes?.map(c => {
+          const id = examByCode.get(c);
+          if (!id) throw new Error(`Unknown exam code: "${c}"`);
+          return id;
+        });
+
+        if (!subjectId) throw new Error(`Unknown subject (code "${r.subjectCode}" not found)`);
+        if (!topicId)   throw new Error(`Unknown topic (code "${r.topicCode}" not found)`);
+        if (!examIds || examIds.length === 0) throw new Error('At least one exam required');
+
+        const created = await this.create(adminId, {
+          subjectId,
+          topicId,
+          examIds,
+          difficulty:          r.difficulty ?? 'medium',
+          type:                r.type ?? 'mcq',
+          status:              r.status ?? 'draft',
+          xpReward:            r.xpReward,
+          prompt:              r.prompt ?? '',
+          options:             r.options ?? [],
+          correctOptionLabel:  r.correctOptionLabel ?? '',
+          officialExplanation: r.officialExplanation ?? null,
+        });
+
+        result.rows.push({ index: i, ok: true, questionId: created.id });
+        result.succeeded++;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        result.rows.push({ index: i, ok: false, error: message });
+        result.failed++;
+      }
+    }
+
+    return result;
   }
 
   /** All the rules in one place. Throws BadRequest with a clear message. */
