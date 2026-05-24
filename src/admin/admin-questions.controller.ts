@@ -1,6 +1,21 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { AdminJwtAuthGuard } from '../admin-auth/guards/admin-jwt-auth.guard';
-import { AdminQuestionsService } from './admin-questions.service';
+import { AdminQuestionsService, type CreateQuestionInput } from './admin-questions.service';
+
+export class CreateQuestionDto implements CreateQuestionInput {
+  subjectId:           string;
+  topicId:             string;
+  examIds:             string[];
+  difficulty:          'easy' | 'medium' | 'hard';
+  type?:               'mcq';
+  status?:             'draft' | 'published';
+  xpReward?:           number;
+  prompt:              string;
+  options:             { label: string; text: string; sub?: string | null }[];
+  correctOptionLabel:  string;
+  officialExplanation?: { steps: string[] } | null;
+}
 
 @UseGuards(AdminJwtAuthGuard)
 @Controller('admin/questions')
@@ -28,5 +43,11 @@ export class AdminQuestionsController {
   @Get(':id')
   detail(@Param('id') id: string) {
     return this.service.detail(id);
+  }
+
+  @Post()
+  create(@Req() req, @Body() dto: CreateQuestionDto) {
+    const admin = (req as Request).user as { id: string };
+    return this.service.create(admin.id, dto);
   }
 }
