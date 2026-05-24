@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ExamRequiredGuard } from '../common/guards/exam-required.guard';
@@ -36,5 +36,17 @@ export class DailyChallengeController {
   submitAttempt(@Req() req, @Body() dto: DailyAttemptDto) {
     const user = (req as Request).user as { id: string };
     return this.dailyChallengeService.submitAttempt(user.id, dto);
+  }
+
+  // GET /daily-challenge/:id/top-solvers
+  @Get(':id/top-solvers')
+  topSolvers(
+    @Req() req,
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+  ) {
+    const user = (req as Request).user as { id: string };
+    const parsed = limit ? parseInt(limit, 10) : 5;
+    return this.dailyChallengeService.getTopSolvers(id, user.id, Number.isFinite(parsed) ? parsed : 5);
   }
 }

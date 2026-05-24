@@ -4,6 +4,7 @@ enum SessionMode {
   drill
   daily
   custom
+  bookmark
 }
 
 enum SessionDifficulty {

@@ -1,5 +1,5 @@
 export class CreateSessionDto {
-  mode: 'quick' | 'mock' | 'drill' | 'custom';
+  mode: 'quick' | 'mock' | 'drill' | 'custom' | 'bookmark';
   examId?: string;
   subjectId?: string;
   topicId?: string;

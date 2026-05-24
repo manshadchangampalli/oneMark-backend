@@ -31,41 +31,60 @@ export class PracticeService {
     const examId = await this.examsService.resolveExamId(userId, dto.examId);
 
     const needed = dto.questionCount ?? 10;
+    let selectedIds: string[];
 
-    const baseWhere: Record<string, unknown> = {
-      status: 'published',
-      questionExams: { some: { examId } },
-    };
-    if (dto.subjectId) baseWhere.subjectId = dto.subjectId;
-    if (dto.topicId) baseWhere.topicId = dto.topicId;
-    if (dto.difficulty && dto.difficulty !== 'mixed') baseWhere.difficulty = dto.difficulty;
+    if (dto.mode === 'bookmark') {
+      // Bookmark practice — pull from the user's own bookmarked questions.
+      // Ignore subject/topic/difficulty filters (bookmarks are already user-curated).
+      const bookmarked = await this.prisma.bookmark.findMany({
+        where: { userId, question: { status: 'published' } },
+        orderBy: { createdAt: 'desc' },
+        select: { questionId: true },
+      });
+      if (bookmarked.length === 0) {
+        throw new UnprocessableEntityException('You have no bookmarks to practice');
+      }
+      selectedIds = shuffle(bookmarked.map((b) => b.questionId)).slice(
+        0,
+        Math.min(needed, bookmarked.length),
+      );
+    } else {
+      const baseWhere: Record<string, unknown> = {
+        status: 'published',
+        questionExams: { some: { examId } },
+      };
+      if (dto.subjectId) baseWhere.subjectId = dto.subjectId;
+      if (dto.topicId) baseWhere.topicId = dto.topicId;
+      if (dto.difficulty && dto.difficulty !== 'mixed') baseWhere.difficulty = dto.difficulty;
 
-    // Prefer questions the user hasn't attempted yet
-    const attemptedIds = await this.prisma.attempt.findMany({
-      where: { userId, question: { questionExams: { some: { examId } } } },
-      select: { questionId: true },
-      distinct: ['questionId'],
-    });
-    const excludeIds = attemptedIds.map((a) => a.questionId);
+      // Prefer questions the user hasn't attempted yet
+      const attemptedIds = await this.prisma.attempt.findMany({
+        where: { userId, question: { questionExams: { some: { examId } } } },
+        select: { questionId: true },
+        distinct: ['questionId'],
+      });
+      const excludeIds = attemptedIds.map((a) => a.questionId);
 
-    const freshPool = await this.prisma.question.findMany({
-      where: { ...baseWhere, ...(excludeIds.length ? { id: { notIn: excludeIds } } : {}) },
-      select: { id: true },
-    });
+      const freshPool = await this.prisma.question.findMany({
+        where: { ...baseWhere, ...(excludeIds.length ? { id: { notIn: excludeIds } } : {}) },
+        select: { id: true },
+      });
 
-    // Fall back to full pool if not enough fresh questions
-    const pool = freshPool.length >= needed
-      ? freshPool
-      : await this.prisma.question.findMany({ where: baseWhere, select: { id: true } });
+      // Fall back to full pool if not enough fresh questions
+      const pool = freshPool.length >= needed
+        ? freshPool
+        : await this.prisma.question.findMany({ where: baseWhere, select: { id: true } });
 
-    if (pool.length === 0) {
-      throw new UnprocessableEntityException('No questions available for this filter');
+      if (pool.length === 0) {
+        throw new UnprocessableEntityException('No questions available for this filter');
+      }
+
+      selectedIds = shuffle(pool.map((q) => q.id)).slice(
+        0,
+        Math.min(needed, pool.length),
+      );
     }
 
-    const selectedIds = shuffle(pool.map((q) => q.id)).slice(
-      0,
-      Math.min(needed, pool.length),
-    );
     const count = selectedIds.length;
 
     const session = await this.prisma.$transaction(async (tx) => {
@@ -319,7 +338,12 @@ export class PracticeService {
           select: {
             isCorrect: true,
             xpAwarded: true,
-            question: { select: { topicId: true } },
+            question: {
+              select: {
+                topicId: true,
+                topic: { select: { label: true } },
+              },
+            },
           },
         },
       },
@@ -385,17 +409,23 @@ export class PracticeService {
     score: number;
     total: number;
     timeSpentSec: number;
-    attempts: { isCorrect: boolean; xpAwarded: number; question: { topicId: string } }[];
+    attempts: {
+      isCorrect: boolean;
+      xpAwarded: number;
+      question: { topicId: string; topic: { label: string } | null };
+    }[];
   }) {
     const accuracy = session.total > 0
       ? Math.round((session.score / session.total) * 10000) / 100
       : 0;
 
-    const byTopicMap = new Map<string, { correct: number; total: number }>();
+    const byTopicMap = new Map<string, { label: string; correct: number; total: number }>();
     for (const a of session.attempts) {
       const tid = a.question.topicId;
-      const curr = byTopicMap.get(tid) ?? { correct: 0, total: 0 };
+      const label = a.question.topic?.label ?? 'Unknown topic';
+      const curr = byTopicMap.get(tid) ?? { label, correct: 0, total: 0 };
       byTopicMap.set(tid, {
+        label,
         correct: curr.correct + (a.isCorrect ? 1 : 0),
         total: curr.total + 1,
       });
@@ -406,11 +436,16 @@ export class PracticeService {
       total: session.total,
       accuracy,
       timeSpentSec: session.timeSpentSec,
-      byTopic: Array.from(byTopicMap.entries()).map(([topicId, stats]) => ({
-        topicId,
-        correct: stats.correct,
-        total: stats.total,
-      })),
+      // Sorted weakest-first so the UI naturally surfaces "practice these again"
+      byTopic: Array.from(byTopicMap.entries())
+        .map(([topicId, s]) => ({
+          topicId,
+          label:   s.label,
+          correct: s.correct,
+          total:   s.total,
+          pct:     s.total > 0 ? Math.round((s.correct / s.total) * 100) : 0,
+        }))
+        .sort((a, b) => a.pct - b.pct),
       xpAwarded: session.attempts.reduce((sum, a) => sum + a.xpAwarded, 0),
     };
   }

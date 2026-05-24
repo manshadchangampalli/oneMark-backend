@@ -253,6 +253,29 @@ export class DailyChallengeService {
     };
   }
 
+  /** Top N fastest correct attempts on a daily challenge — for the "Top solvers today" card. */
+  async getTopSolvers(challengeId: string, currentUserId: string, limit = 5) {
+    const rows = await this.prisma.attempt.findMany({
+      where: { dailyChallengeId: challengeId, isCorrect: true },
+      orderBy: { timeSeconds: 'asc' },
+      take: Math.min(Math.max(limit, 1), 25),
+      select: {
+        userId:      true,
+        timeSeconds: true,
+        user: { select: { name: true, avatarInitial: true } },
+      },
+    });
+
+    return rows.map((r, i) => ({
+      rank:          i + 1,
+      userId:        r.userId,
+      name:          r.user.name,
+      avatarInitial: r.user.avatarInitial,
+      timeSeconds:   r.timeSeconds,
+      isMe:          r.userId === currentUserId,
+    }));
+  }
+
   // Admin: set or overwrite today's (or any date's) challenge for an exam
   async setChallenge(examId: string, questionId: string, date?: Date) {
     const targetDate = date ?? this.today();
