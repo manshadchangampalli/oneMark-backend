@@ -28,6 +28,14 @@ model Question {
   currentRevisionId   String?            @unique @db.Uuid
   createdBy           String?            @db.Uuid
 
+  /// Free-form classification. Use prefixes for queryable dimensions:
+  ///   "stage:prelims" | "stage:mains" | "stage:main" | "stage:advanced"
+  ///   "year:2024" | "year:2018"
+  ///   "source:LDC-2024-paper-2"
+  ///   "topic-kind:current-affairs" | "topic-kind:static-gk"
+  /// Filter via `WHERE tags @> ARRAY[...]` — backed by GIN index for O(log N)
+  tags                String[]           @default([])
+
   subject          Subject            @relation(fields: [subjectId], references: [id])
   topic            Topic              @relation(fields: [topicId], references: [id])
   currentRevision  QuestionRevision?  @relation("CurrentRevision", fields: [currentRevisionId], references: [id])
@@ -45,6 +53,7 @@ model Question {
   @@index([subjectId, topicId])
   @@index([difficulty])
   @@index([status])
+  @@index([tags], type: Gin)
 }
 
 // Append-only — never edited after insert; links attempt history to exact question text

@@ -25,6 +25,12 @@ export class ExamsController {
   findAll() {
     return this.examsService.findAllActive();
   }
+
+  // GET /exams/categories — categories with nested exams grouped by tier
+  @Get('categories')
+  findCategoriesGrouped() {
+    return this.examsService.findCategoriesGrouped();
+  }
 }
 
 // /me/exams — all require auth

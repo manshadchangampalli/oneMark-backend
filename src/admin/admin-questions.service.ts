@@ -1,6 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** Trim, lowercase, dedupe, drop empties. Keeps tag storage consistent
+ *  so "STAGE:Prelims" and "stage:prelims " match the same index entry. */
+function normalizeTags(input?: string[]): string[] {
+  if (!input?.length) return [];
+  return [...new Set(input.map(t => t.trim().toLowerCase()).filter(Boolean))];
+}
+
 export interface OptionInput {
   label: string;
   text:  string;
@@ -19,6 +26,7 @@ export interface CreateQuestionInput {
   options:             OptionInput[];
   correctOptionLabel:  string;
   officialExplanation?: { steps: string[] } | null;
+  tags?:               string[];
 }
 
 /** Same as CreateQuestionInput but every ID can be supplied as a *code*
@@ -82,6 +90,7 @@ export class AdminQuestionsService {
         status:       true,
         xpReward:     true,
         successRate:  true,
+        tags:         true,
         createdAt:    true,
         subject:         { select: { id: true, label: true, colorHex: true } },
         topic:           { select: { id: true, label: true } },
@@ -104,6 +113,7 @@ export class AdminQuestionsService {
         status:      q.status,
         xpReward:    q.xpReward,
         successRate: q.successRate,
+        tags:        q.tags,
         totalAttempts: q._count.attempts,
         createdAt:   q.createdAt,
       })),
@@ -122,6 +132,7 @@ export class AdminQuestionsService {
         xpReward:       true,
         successRate:    true,
         avgTimeSeconds: true,
+        tags:           true,
         createdAt:      true,
         updatedAt:      true,
         subject:        { select: { id: true, label: true, colorHex: true } },
@@ -161,6 +172,7 @@ export class AdminQuestionsService {
     const type     = dto.type     ?? 'mcq';
     const xpReward = dto.xpReward ?? 50;
     const explanation = dto.officialExplanation ?? null;
+    const tags     = normalizeTags(dto.tags);
 
     const questionId = await this.prisma.$transaction(async (tx) => {
       // 1. Question shell — currentRevisionId set later (circular FK)
@@ -172,6 +184,7 @@ export class AdminQuestionsService {
           type,
           status,
           xpReward,
+          tags,
           createdBy:  adminId,
         },
         select: { id: true },
@@ -297,6 +310,7 @@ export class AdminQuestionsService {
           options:             r.options ?? [],
           correctOptionLabel:  r.correctOptionLabel ?? '',
           officialExplanation: r.officialExplanation ?? null,
+          tags:                r.tags ?? [],
         });
 
         result.rows.push({ index: i, ok: true, questionId: created.id });

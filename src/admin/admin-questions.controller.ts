@@ -15,6 +15,7 @@ export class CreateQuestionDto implements CreateQuestionInput {
   options:             { label: string; text: string; sub?: string | null }[];
   correctOptionLabel:  string;
   officialExplanation?: { steps: string[] } | null;
+  tags?:               string[];
 }
 
 @UseGuards(AdminJwtAuthGuard)

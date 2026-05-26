@@ -14,8 +14,45 @@ export class ExamsService {
   // GET /exams — all exams (active first, then inactive); isActive included for frontend disabled state
   findAllActive() {
     return this.prisma.exam.findMany({
-      select: { id: true, code: true, label: true, description: true, isActive: true },
+      select: {
+        id: true, code: true, label: true, description: true, isActive: true,
+        tier: true, categoryId: true,
+      },
       orderBy: [{ isActive: 'desc' }, { label: 'asc' }],
+    });
+  }
+
+  /** GET /exams/categories — categories with nested exams grouped by tier.
+   *  Used by the signup/profile two-step picker. */
+  async findCategoriesGrouped() {
+    const cats = await this.prisma.examCategory.findMany({
+      where: { archivedAt: null },
+      orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }, { label: 'asc' }],
+      select: {
+        id: true, code: true, label: true, description: true,
+        colorHex: true, iconKey: true, isActive: true,
+        exams: {
+          where: { archivedAt: null, isActive: true },
+          select: { id: true, code: true, label: true, description: true, tier: true },
+          orderBy: [{ tier: 'asc' }, { label: 'asc' }],
+        },
+      },
+    });
+
+    // Group each category's exams by tier (null tier becomes "Other")
+    return cats.map((c) => {
+      const tierMap = new Map<string, typeof c.exams>();
+      for (const e of c.exams) {
+        const key = e.tier ?? '';
+        if (!tierMap.has(key)) tierMap.set(key, []);
+        tierMap.get(key)!.push(e);
+      }
+      const tiers = [...tierMap.entries()].map(([tier, exams]) => ({
+        tier: tier || null,
+        exams,
+      }));
+      const { exams: _exams, ...rest } = c;
+      return { ...rest, tiers };
     });
   }
 
