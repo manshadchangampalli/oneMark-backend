@@ -42,13 +42,22 @@ export class AdminExamsService {
     if (!dto.code?.trim() || !dto.label?.trim()) {
       throw new BadRequestException('Code and label are required');
     }
-    const existing = await this.prisma.exam.findUnique({ where: { code: dto.code } });
+    if (!dto.categoryId) {
+      throw new BadRequestException('Category is required');
+    }
+    const [existing, category] = await Promise.all([
+      this.prisma.exam.findUnique({ where: { code: dto.code } }),
+      this.prisma.examCategory.findFirst({ where: { id: dto.categoryId, archivedAt: null } }),
+    ]);
     if (existing) throw new ConflictException('Exam code already exists');
+    if (!category) throw new BadRequestException('Category not found or archived');
 
     return this.prisma.exam.create({
       data: {
         code:        dto.code.trim(),
         label:       dto.label.trim(),
+        categoryId:  dto.categoryId,
+        tier:        dto.tier?.trim() || null,
         description: dto.description?.trim() || null,
         isActive:    dto.isActive ?? true,
       },
@@ -63,6 +72,8 @@ export class AdminExamsService {
       where: { id },
       data: {
         ...(dto.label !== undefined       ? { label: dto.label.trim() } : {}),
+        ...(dto.categoryId !== undefined  ? { categoryId: dto.categoryId } : {}),
+        ...(dto.tier !== undefined        ? { tier: dto.tier?.trim() || null } : {}),
         ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
         ...(dto.isActive !== undefined    ? { isActive: dto.isActive } : {}),
       },

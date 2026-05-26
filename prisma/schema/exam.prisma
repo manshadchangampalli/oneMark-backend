@@ -23,12 +23,12 @@ model Exam {
   code        String   @unique // 'psc-ldc', 'psc-police', 'jee-main', etc.
   label       String           // 'LDC', 'Police Constable', 'JEE Main'
   description String?
-  categoryId  String?  @db.Uuid    // nullable for now; backfilled then enforced later
+  categoryId  String   @db.Uuid       // every exam belongs to exactly one category
   tier        String?                 // '10th Level' | '+2 Level' | 'Degree Level' — within a category
   isActive    Boolean  @default(true)
   archivedAt  DateTime?
 
-  category         ExamCategory?     @relation(fields: [categoryId], references: [id])
+  category         ExamCategory      @relation(fields: [categoryId], references: [id])
   userExams        UserExam[]
   subjectExams     SubjectExam[]
   topicExams       TopicExam[]

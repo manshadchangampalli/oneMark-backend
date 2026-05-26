@@ -13,6 +13,7 @@ model Subject {
   practiceSessions PracticeSession[]
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model SubjectExam {

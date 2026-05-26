@@ -56,6 +56,8 @@ export class PracticeService {
       if (dto.subjectId) baseWhere.subjectId = dto.subjectId;
       if (dto.topicId) baseWhere.topicId = dto.topicId;
       if (dto.difficulty && dto.difficulty !== 'mixed') baseWhere.difficulty = dto.difficulty;
+      const tagFilter = (dto.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+      if (tagFilter.length > 0) baseWhere.tags = { hasEvery: tagFilter };
 
       // Prefer questions the user hasn't attempted yet
       const attemptedIds = await this.prisma.attempt.findMany({

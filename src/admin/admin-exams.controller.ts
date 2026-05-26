@@ -5,12 +5,16 @@ import { AdminExamsService } from './admin-exams.service';
 export class CreateExamDto {
   code:        string;
   label:       string;
+  categoryId:  string;        // required — every exam belongs to one category
+  tier?:       string;        // optional — '10th Level' | '+2 Level' | 'Degree Level' | null
   description?: string;
   isActive?:   boolean;
 }
 
 export class UpdateExamDto {
   label?:       string;
+  categoryId?:  string;
+  tier?:        string | null;
   description?: string;
   isActive?:    boolean;
 }

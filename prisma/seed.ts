@@ -7,16 +7,29 @@ import { PrismaClient } from '../src/generated/prisma';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
-// ── Exams ────────────────────────────────────────────────────────────────────
+// ── Exam categories + posts ─────────────────────────────────────────────────
+// Categories are seeded by the 20260525_add_exam_category migration; this
+// list is here for the per-post Exam rows that the seed maintains.
 
-const EXAMS = [
-  { code: 'psc',    label: 'Kerala PSC', description: 'Kerala Public Service Commission', isActive: true  },
-  { code: 'jee',    label: 'JEE',        description: 'Main + Advanced',                  isActive: false },
-  { code: 'neet',   label: 'NEET',       description: 'Medical entrance',                 isActive: false },
-  { code: 'cuet',   label: 'CUET',       description: 'Central universities',             isActive: false },
-  { code: 'boards', label: 'Boards',     description: 'CBSE / ICSE / State',             isActive: false },
-  { code: 'gate',   label: 'GATE',       description: 'Engineering PG',                  isActive: false },
-  { code: 'cat',    label: 'CAT',        description: 'Management',                      isActive: false },
+const EXAMS: Array<{
+  code: string;
+  label: string;
+  categoryCode: string;
+  tier?: string;
+  description: string;
+  isActive: boolean;
+}> = [
+  // PSC — per-post (seeded by 20260525120000 migration; kept here so re-seeds stay correct)
+  { code: 'psc-ldc',          label: 'LDC',                       categoryCode: 'psc', tier: '10th Level',  description: 'Lower Division Clerk (10th Level common prelim)',   isActive: true },
+  { code: 'psc-lgs',          label: 'LGS',                       categoryCode: 'psc', tier: '10th Level',  description: 'Last Grade Servant',                                isActive: true },
+  { code: 'psc-veo',          label: 'Village Extension Officer', categoryCode: 'psc', tier: '10th Level',  description: 'VEO Gr. II — rural development field officer',      isActive: true },
+  { code: 'psc-police',       label: 'Police Constable',          categoryCode: 'psc', tier: '10th Level',  description: 'Civil Police Constable',                            isActive: true },
+  { code: 'psc-fireman',      label: 'Fireman',                   categoryCode: 'psc', tier: '10th Level',  description: 'Fireman / Fire & Rescue Officer Tr.',               isActive: true },
+  { code: 'psc-plus-two',     label: 'Plus Two Level Prelims',    categoryCode: 'psc', tier: '+2 Level',    description: 'Common +2 Level Preliminary Examination',           isActive: true },
+  { code: 'psc-ua',           label: 'University Assistant',      categoryCode: 'psc', tier: 'Degree Level',description: 'Universities / non-secretariat clerical',           isActive: true },
+  { code: 'psc-cpo',          label: 'Civil Police Officer',      categoryCode: 'psc', tier: 'Degree Level',description: 'Sub-Inspector / Civil Police Officer (Trainee)',    isActive: true },
+  { code: 'psc-secretariat',  label: 'Secretariat Assistant',     categoryCode: 'psc', tier: 'Degree Level',description: 'Secretariat / PSC office / similar',                isActive: true },
+  { code: 'psc-si',           label: 'Sub Inspector',             categoryCode: 'psc', tier: 'Degree Level',description: 'Sub Inspector of Police (Men)',                     isActive: true },
 ];
 
 // ── Location ─────────────────────────────────────────────────────────────────
@@ -677,8 +690,28 @@ const PSC_QUESTIONS: Question[] = [
 async function main() {
   // ── Exams ──
   console.log('Seeding exams...');
+  // Resolve category codes → ids once. Categories are created by the
+  // 20260525_add_exam_category migration before this seed ever runs.
+  const categoryRows = await prisma.examCategory.findMany({
+    select: { id: true, code: true },
+  });
+  const categoryByCode = new Map(categoryRows.map((c) => [c.code, c.id]));
+
   for (const e of EXAMS) {
-    await prisma.exam.upsert({ where: { code: e.code }, create: e, update: e });
+    const categoryId = categoryByCode.get(e.categoryCode);
+    if (!categoryId) {
+      console.warn(`  skipping ${e.code}: no ExamCategory with code "${e.categoryCode}"`);
+      continue;
+    }
+    const data = {
+      code:        e.code,
+      label:       e.label,
+      description: e.description,
+      isActive:    e.isActive,
+      tier:        e.tier ?? null,
+      categoryId,
+    };
+    await prisma.exam.upsert({ where: { code: e.code }, create: data, update: data });
   }
   const activeCodes = EXAMS.filter((e) => e.isActive).map((e) => e.code);
   await prisma.exam.updateMany({ where: { code: { notIn: activeCodes } }, data: { isActive: false } });
@@ -704,22 +737,34 @@ async function main() {
     await prisma.subject.upsert({ where: { code: s.code }, create: s, update: s });
   }
 
+  // ── Resolve exam codes once (seed data uses category codes like "psc"
+  //     to mean "all posts under PSC"; expand them to per-post exam rows).
+  async function resolveExamCodeToIds(code: string): Promise<{ id: string; code: string }[]> {
+    const direct = await prisma.exam.findUnique({ where: { code }, select: { id: true, code: true } });
+    if (direct) return [direct];
+    const cat = categoryByCode.get(code);
+    if (!cat) return [];
+    return prisma.exam.findMany({ where: { categoryId: cat }, select: { id: true, code: true } });
+  }
+
   // ── Exam → Subject mappings ──
   console.log('Seeding exam → subject mappings...');
   await prisma.subjectExam.deleteMany({});
   for (const [examCode, subjectCodes] of Object.entries(EXAM_SUBJECTS)) {
-    const exam = await prisma.exam.findUnique({ where: { code: examCode } });
-    if (!exam) continue;
-    for (let i = 0; i < subjectCodes.length; i++) {
-      const subject = await prisma.subject.findUnique({ where: { code: subjectCodes[i] } });
-      if (!subject) continue;
-      await prisma.subjectExam.upsert({
-        where: { subjectId_examId: { subjectId: subject.id, examId: exam.id } },
-        create: { subjectId: subject.id, examId: exam.id, sortOrder: i + 1 },
-        update: { sortOrder: i + 1 },
-      });
+    const exams = await resolveExamCodeToIds(examCode);
+    if (exams.length === 0) continue;
+    for (const exam of exams) {
+      for (let i = 0; i < subjectCodes.length; i++) {
+        const subject = await prisma.subject.findUnique({ where: { code: subjectCodes[i] } });
+        if (!subject) continue;
+        await prisma.subjectExam.upsert({
+          where: { subjectId_examId: { subjectId: subject.id, examId: exam.id } },
+          create: { subjectId: subject.id, examId: exam.id, sortOrder: i + 1 },
+          update: { sortOrder: i + 1 },
+        });
+      }
     }
-    console.log(`  ${examCode}: ${subjectCodes.join(', ')}`);
+    console.log(`  ${examCode}: ${exams.length} exam row(s) × ${subjectCodes.length} subject(s)`);
   }
 
   // ── Topics ──
@@ -742,24 +787,26 @@ async function main() {
   // ── Exam → Topic mappings ──
   console.log('Seeding exam → topic mappings...');
   for (const [examCode, subjectTopics] of Object.entries(EXAM_TOPICS)) {
-    const exam = await prisma.exam.findUnique({ where: { code: examCode } });
-    if (!exam) continue;
-    for (const [subjectCode, topicCodes] of Object.entries(subjectTopics)) {
-      const subject = await prisma.subject.findUnique({ where: { code: subjectCode } });
-      if (!subject) continue;
-      for (let i = 0; i < topicCodes.length; i++) {
-        const topic = await prisma.topic.findUnique({
-          where: { subjectId_code: { subjectId: subject.id, code: topicCodes[i] } },
-        });
-        if (!topic) continue;
-        await prisma.topicExam.upsert({
-          where: { topicId_examId: { topicId: topic.id, examId: exam.id } },
-          create: { topicId: topic.id, examId: exam.id, sortOrder: i + 1 },
-          update: { sortOrder: i + 1 },
-        });
+    const exams = await resolveExamCodeToIds(examCode);
+    if (exams.length === 0) continue;
+    for (const exam of exams) {
+      for (const [subjectCode, topicCodes] of Object.entries(subjectTopics)) {
+        const subject = await prisma.subject.findUnique({ where: { code: subjectCode } });
+        if (!subject) continue;
+        for (let i = 0; i < topicCodes.length; i++) {
+          const topic = await prisma.topic.findUnique({
+            where: { subjectId_code: { subjectId: subject.id, code: topicCodes[i] } },
+          });
+          if (!topic) continue;
+          await prisma.topicExam.upsert({
+            where: { topicId_examId: { topicId: topic.id, examId: exam.id } },
+            create: { topicId: topic.id, examId: exam.id, sortOrder: i + 1 },
+            update: { sortOrder: i + 1 },
+          });
+        }
       }
     }
-    console.log(`  ${examCode} topics mapped`);
+    console.log(`  ${examCode} topics mapped to ${exams.length} exam row(s)`);
   }
 
   // ── PSC Questions ──
@@ -809,13 +856,14 @@ async function main() {
     });
 
     for (const examCode of q.examCodes) {
-      const exam = await prisma.exam.findUnique({ where: { code: examCode } });
-      if (!exam) continue;
-      await prisma.questionExam.upsert({
-        where: { questionId_examId: { questionId: question.id, examId: exam.id } },
-        create: { questionId: question.id, examId: exam.id },
-        update: {},
-      });
+      const exams = await resolveExamCodeToIds(examCode);
+      for (const exam of exams) {
+        await prisma.questionExam.upsert({
+          where: { questionId_examId: { questionId: question.id, examId: exam.id } },
+          create: { questionId: question.id, examId: exam.id },
+          update: {},
+        });
+      }
     }
 
     console.log(`  ✓ [${q.subjectCode}] ${q.prompt.slice(0, 55)}...`);

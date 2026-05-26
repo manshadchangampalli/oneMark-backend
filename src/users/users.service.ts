@@ -23,8 +23,8 @@ export class UsersService {
     });
   }
 
-  findById(id: string) {
-    return this.prisma.user.findFirst({
+  async findById(id: string) {
+    const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true, email: true, name: true,
@@ -33,8 +33,27 @@ export class UsersService {
         state: true, district: true, role: true,
         totalXp: true, totalAttempts: true, totalCorrect: true,
         currentStreak: true, longestStreak: true,
+        userExams: {
+          where: { isPrimary: true },
+          select: {
+            exam: {
+              select: {
+                id: true, code: true, label: true, tier: true,
+                category: { select: { id: true, code: true, label: true, colorHex: true } },
+              },
+            },
+          },
+        },
       },
     });
+    if (!user) return null;
+
+    // Derive a clean primaryExam object so the frontend doesn't have to
+    // peek into the userExams array or fall back on the legacy
+    // user.targetExam string (which can drift out of sync).
+    const primaryExam = user.userExams[0]?.exam ?? null;
+    const { userExams: _ux, ...rest } = user;
+    return { ...rest, primaryExam };
   }
 
   updateProfile(id: string, data: { name?: string; school?: string | null; grade?: string | null }) {
